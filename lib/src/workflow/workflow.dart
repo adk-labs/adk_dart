@@ -50,6 +50,55 @@ const String defaultRoute = DEFAULT_ROUTE;
 
 const String _workflowOutputOwner = r'$workflow';
 
+Set<String> _collectOwnRetryNodeNames(List<BaseNode> nodes) {
+  return Set<String>.unmodifiable(<String>{
+    for (final BaseNode node in nodes)
+      if (node.name != START && hasOwnRetryConfig(node)) node.name,
+  });
+}
+
+({
+  List<BaseNode> nodes,
+  Set<String> ownRetryNodeNames,
+  RetryConfig? graphRetryConfig,
+})
+_propagateRetryConfig({
+  required List<BaseNode> nodes,
+  required RetryConfig? retryConfig,
+  required RetryConfig? graphRetryConfig,
+  required Set<String> ownRetryNodeNames,
+}) {
+  if (retryConfig == graphRetryConfig) {
+    return (
+      nodes: List<BaseNode>.unmodifiable(nodes),
+      ownRetryNodeNames: ownRetryNodeNames,
+      graphRetryConfig: graphRetryConfig,
+    );
+  }
+  final Set<String> effectiveOwnNames = graphRetryConfig == null
+      ? _collectOwnRetryNodeNames(nodes)
+      : ownRetryNodeNames;
+  final Map<BaseNode, BaseNode> resolvedMap = Map<BaseNode, BaseNode>.identity();
+  BaseNode resolveNode(BaseNode node) {
+    final BaseNode? existing = resolvedMap[node];
+    if (existing != null) {
+      return existing;
+    }
+    final BaseNode resolved =
+        (node.name == START || effectiveOwnNames.contains(node.name))
+        ? node
+        : _withRetryConfig(node, retryConfig);
+    resolvedMap[node] = resolved;
+    return resolved;
+  }
+
+  return (
+    nodes: List<BaseNode>.unmodifiable(nodes.map(resolveNode)),
+    ownRetryNodeNames: effectiveOwnNames,
+    graphRetryConfig: retryConfig,
+  );
+}
+
 /// Node-based workflow agent.
 ///
 /// ```dart
@@ -67,17 +116,66 @@ const String _workflowOutputOwner = r'$workflow';
 /// ```
 class Workflow extends BaseAgent {
   /// Creates a workflow.
+  ///
+  /// When [retryConfig] is provided, static graph children without their own
+  /// retry policy inherit it on construction (or copy via [copyWith]/[clone]).
+  /// [nodes] holds copies of inheriting children (cloning agents where
+  /// supported) and leaves the caller's original nodes unchanged.
   Workflow({
     required super.name,
     super.description,
     required List<BaseNode> nodes,
     List<Edge> edges = const <Edge>[],
     this.maxConcurrency,
+    this.retryConfig,
     super.beforeAgentCallback,
     super.afterAgentCallback,
-  }) : nodes = List<BaseNode>.unmodifiable(nodes),
-       edges = List<Edge>.unmodifiable(edges),
+  }) : edges = List<Edge>.unmodifiable(edges),
        super(subAgents: const <BaseAgent>[]) {
+    final ({
+      List<BaseNode> nodes,
+      Set<String> ownRetryNodeNames,
+      RetryConfig? graphRetryConfig,
+    })
+    propagated = _propagateRetryConfig(
+      nodes: nodes,
+      retryConfig: retryConfig,
+      graphRetryConfig: null,
+      ownRetryNodeNames: const <String>{},
+    );
+    this.nodes = propagated.nodes;
+    _ownRetryNodeNames = propagated.ownRetryNodeNames;
+    _graphRetryConfig = propagated.graphRetryConfig;
+    _validateStaticGraphEdges(this.nodes, this.edges);
+  }
+
+  Workflow._copy({
+    required super.name,
+    super.description,
+    required List<BaseNode> nodes,
+    required List<Edge> edges,
+    this.maxConcurrency,
+    this.retryConfig,
+    required Set<String> ownRetryNodeNames,
+    required RetryConfig? graphRetryConfig,
+    super.beforeAgentCallback,
+    super.afterAgentCallback,
+  }) : edges = List<Edge>.unmodifiable(edges),
+       super(subAgents: const <BaseAgent>[]) {
+    final ({
+      List<BaseNode> nodes,
+      Set<String> ownRetryNodeNames,
+      RetryConfig? graphRetryConfig,
+    })
+    propagated = _propagateRetryConfig(
+      nodes: nodes,
+      retryConfig: retryConfig,
+      graphRetryConfig: graphRetryConfig,
+      ownRetryNodeNames: ownRetryNodeNames,
+    );
+    this.nodes = propagated.nodes;
+    _ownRetryNodeNames = propagated.ownRetryNodeNames;
+    _graphRetryConfig = propagated.graphRetryConfig;
     _validateStaticGraphEdges(this.nodes, this.edges);
   }
 
@@ -102,6 +200,7 @@ class Workflow extends BaseAgent {
     required List<BaseNode> nodes,
     required void Function(EdgesBuilder g) buildEdges,
     int? maxConcurrency,
+    RetryConfig? retryConfig,
     Object? beforeAgentCallback,
     Object? afterAgentCallback,
   }) {
@@ -111,13 +210,14 @@ class Workflow extends BaseAgent {
       nodes: nodes,
       edges: EdgesBuilder.buildEdges(buildEdges),
       maxConcurrency: maxConcurrency,
+      retryConfig: retryConfig,
       beforeAgentCallback: beforeAgentCallback,
       afterAgentCallback: afterAgentCallback,
     );
   }
 
   /// Nodes in this workflow.
-  final List<BaseNode> nodes;
+  late final List<BaseNode> nodes;
 
   /// Directed edges between nodes.
   final List<Edge> edges;
@@ -127,6 +227,121 @@ class Workflow extends BaseAgent {
   /// A null or non-positive value means unlimited concurrency. Dynamic child
   /// nodes run through [WorkflowContext.runNode] are not limited by this value.
   final int? maxConcurrency;
+
+  /// Immutable retry policy inherited by static children without their own.
+  ///
+  /// Use `Workflow(..., retryConfig: ...)` or [copyWith]/[clone] to configure
+  /// or change the policy.
+  final RetryConfig? retryConfig;
+
+  late final Set<String> _ownRetryNodeNames;
+  late final RetryConfig? _graphRetryConfig;
+
+  static const Set<String> _workflowCloneUpdateFields = <String>{
+    ...BaseAgent.baseCloneUpdateFields,
+    'nodes',
+    'edges',
+    'maxConcurrency',
+    'retryConfig',
+  };
+
+  static const Map<String, String> _workflowCloneFieldAliases =
+      <String, String>{
+        'max_concurrency': 'maxConcurrency',
+        'retry_config': 'retryConfig',
+      };
+
+  /// Returns a copy of this workflow, propagating updated [retryConfig] or
+  /// [nodes]/[edges] to inheriting static children while preserving children's
+  /// own policies.
+  Workflow copyWith({
+    String? name,
+    String? description,
+    List<BaseNode>? nodes,
+    List<Edge>? edges,
+    int? maxConcurrency,
+    bool clearMaxConcurrency = false,
+    RetryConfig? retryConfig,
+    bool clearRetryConfig = false,
+    Object? beforeAgentCallback,
+    Object? afterAgentCallback,
+  }) {
+    final bool replacedGraph = nodes != null;
+    return Workflow._copy(
+      name: name ?? this.name,
+      description: description ?? this.description,
+      nodes: nodes ?? this.nodes,
+      edges: edges ?? this.edges,
+      maxConcurrency: clearMaxConcurrency
+          ? null
+          : (maxConcurrency ?? this.maxConcurrency),
+      retryConfig: clearRetryConfig ? null : (retryConfig ?? this.retryConfig),
+      ownRetryNodeNames: replacedGraph ? const <String>{} : _ownRetryNodeNames,
+      graphRetryConfig: replacedGraph ? null : _graphRetryConfig,
+      beforeAgentCallback: beforeAgentCallback ?? this.beforeAgentCallback,
+      afterAgentCallback: afterAgentCallback ?? this.afterAgentCallback,
+    );
+  }
+
+  @override
+  Workflow clone({Map<String, Object?>? update}) {
+    final Map<String, Object?> baseNormalized = normalizeCloneUpdate(update);
+    final Map<String, Object?> normalized = <String, Object?>{
+      for (final MapEntry<String, Object?> entry in baseNormalized.entries)
+        (_workflowCloneFieldAliases[entry.key] ?? entry.key): entry.value,
+    };
+    validateCloneUpdateFields(
+      update: normalized,
+      allowedFields: _workflowCloneUpdateFields,
+    );
+    final bool replacedNodes = normalized.containsKey('nodes');
+    final Workflow cloned = Workflow._copy(
+      name: cloneFieldValue<String>(
+        update: normalized,
+        fieldName: 'name',
+        currentValue: name,
+      ),
+      description: cloneFieldValue<String>(
+        update: normalized,
+        fieldName: 'description',
+        currentValue: description,
+      ),
+      nodes: cloneListFieldValue<BaseNode>(
+        update: normalized,
+        fieldName: 'nodes',
+        currentValue: nodes,
+      ),
+      edges: cloneListFieldValue<Edge>(
+        update: normalized,
+        fieldName: 'edges',
+        currentValue: edges,
+      ),
+      maxConcurrency: cloneFieldValue<int?>(
+        update: normalized,
+        fieldName: 'maxConcurrency',
+        currentValue: maxConcurrency,
+      ),
+      retryConfig: cloneFieldValue<RetryConfig?>(
+        update: normalized,
+        fieldName: 'retryConfig',
+        currentValue: retryConfig,
+      ),
+      ownRetryNodeNames: replacedNodes ? const <String>{} : _ownRetryNodeNames,
+      graphRetryConfig: replacedNodes ? null : _graphRetryConfig,
+      beforeAgentCallback: cloneObjectFieldValue(
+        update: normalized,
+        fieldName: 'beforeAgentCallback',
+        currentValue: beforeAgentCallback,
+      ),
+      afterAgentCallback: cloneObjectFieldValue(
+        update: normalized,
+        fieldName: 'afterAgentCallback',
+        currentValue: afterAgentCallback,
+      ),
+    );
+    relinkClonedSubAgents(cloned);
+    return cloned;
+  }
 
   /// Runs the workflow without requiring an ADK [InvocationContext].
   ///
@@ -320,13 +535,20 @@ class Workflow extends BaseAgent {
     // Emit initial checkpoint of recovered node states when workflow starts
     _emitNodeCheckpoint(workflowContext);
 
-    await _execute(workflowContext);
+    Object? executionError;
+    StackTrace? executionStackTrace;
+    try {
+      await _execute(workflowContext);
+    } catch (error, stackTrace) {
+      executionError = error;
+      executionStackTrace = stackTrace;
+    }
     _flushNodeCheckpoint(workflowContext);
 
     final bool hasPendingInterrupts = workflowContext.nodeStates.values.any(
       (NodeState state) => _hasUnresolvedWaitingInterrupts(state),
     );
-    if (!hasPendingInterrupts) {
+    if (executionError == null && !hasPendingInterrupts) {
       _emitEndOfAgent(workflowContext);
     }
 
@@ -397,6 +619,9 @@ class Workflow extends BaseAgent {
           ),
         );
       }
+    }
+    if (executionError != null) {
+      Error.throwWithStackTrace(executionError, executionStackTrace!);
     }
   }
 
@@ -503,6 +728,7 @@ class Workflow extends BaseAgent {
         active: active,
         concurrencyLimit: concurrencyLimit,
       );
+      await context._awaitDetachedDynamicChildren();
       _validateSingleTerminalOutput(
         context,
         _terminalNodeNames(dependencies),
@@ -642,6 +868,7 @@ class Workflow extends BaseAgent {
         );
       }
     }
+    await context._awaitDetachedDynamicChildren();
     _flushNodeCheckpoint(context);
     _validateSingleTerminalOutput(
       context,
@@ -1011,6 +1238,8 @@ class Workflow extends BaseAgent {
         },
         waiting: true,
       );
+    } finally {
+      nodeContext._callerFinished = true;
     }
   }
 

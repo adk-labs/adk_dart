@@ -641,13 +641,17 @@ BaseNode _buildParallelWorkerNode(Object node) {
   return buildNode(node);
 }
 
-/// Returns the effective [RetryConfig] configured on [node], unwrapping [ParallelWorker] if needed.
+/// Returns the effective [RetryConfig] configured on [node], unwrapping
+/// [ParallelWorker] and nested [Workflow] agents if needed.
 RetryConfig? nodeRetryConfig(BaseNode node) {
   if (node.retryConfig != null) {
     return node.retryConfig;
   }
   if (node is ParallelWorker) {
     return nodeRetryConfig(node.wrappedNode);
+  }
+  if (node is AgentNode && node.agent is Workflow) {
+    return (node.agent as Workflow).retryConfig;
   }
   return null;
 }
@@ -674,6 +678,15 @@ BaseNode _withRetryConfig(BaseNode node, RetryConfig? retryConfig) {
       requireConfirmation: node.requireConfirmation,
     );
   }
+  if (node is JoinNode) {
+    return JoinNode(
+      name: node.name,
+      description: node.description,
+      dependsOn: node.dependsOn,
+      retryConfig: retryConfig,
+      timeout: node.timeout,
+    );
+  }
   if (node is ToolNode) {
     return ToolNode(
       tool: node.tool,
@@ -689,8 +702,22 @@ BaseNode _withRetryConfig(BaseNode node, RetryConfig? retryConfig) {
   }
   if (node is AgentNode) {
     final BaseAgent? previousParent = node.agent.parentAgent;
-    final AgentNode cloned = AgentNode(
-      agent: node.agent,
+    BaseAgent clonedAgent;
+    if (node.agent is Workflow) {
+      clonedAgent = (node.agent as Workflow).clone(
+        update: <String, Object?>{'retryConfig': retryConfig},
+      );
+    } else {
+      try {
+        clonedAgent = node.agent.clone();
+      } on UnsupportedError {
+        clonedAgent = node.agent;
+      }
+    }
+    clonedAgent.parentAgent = previousParent;
+    node.agent.parentAgent = previousParent;
+    return AgentNode(
+      agent: clonedAgent,
       name: node.name,
       description: node.description,
       dependsOn: node.dependsOn,
@@ -700,8 +727,6 @@ BaseNode _withRetryConfig(BaseNode node, RetryConfig? retryConfig) {
       timeout: node.timeout,
       outputSchema: node.outputSchema,
     );
-    node.agent.parentAgent = previousParent;
-    return cloned;
   }
   if (node is ParallelWorker) {
     return ParallelWorker._(
@@ -770,7 +795,7 @@ class ToolNode extends BaseNode {
 class AgentNode extends BaseNode {
   /// Creates an agent-backed workflow node.
   AgentNode({
-    required this.agent,
+    required BaseAgent agent,
     String? name,
     super.description,
     super.dependsOn,
@@ -779,7 +804,26 @@ class AgentNode extends BaseNode {
     super.retryConfig,
     super.timeout,
     super.outputSchema,
-  }) : super(name: name ?? agent.name, rerunOnResume: rerunOnResume ?? true);
+  }) : agent = _agentWithPropagatedRetry(agent, retryConfig),
+       super(name: name ?? agent.name, rerunOnResume: rerunOnResume ?? true);
+
+  static BaseAgent _agentWithPropagatedRetry(
+    BaseAgent agent,
+    RetryConfig? retryConfig,
+  ) {
+    if (agent is Workflow &&
+        retryConfig != null &&
+        agent.retryConfig != retryConfig) {
+      final BaseAgent? previousParent = agent.parentAgent;
+      final Workflow cloned = agent.clone(
+        update: <String, Object?>{'retryConfig': retryConfig},
+      );
+      cloned.parentAgent = previousParent;
+      agent.parentAgent = previousParent;
+      return cloned;
+    }
+    return agent;
+  }
 
   /// Agent executed by this node.
   final BaseAgent agent;
@@ -1084,6 +1128,11 @@ class AgentNode extends BaseNode {
         return finalEvent;
       }
       return finalOutput;
+    } catch (_) {
+      if (agent is Workflow) {
+        context._failedInWorkflowChild = true;
+      }
+      rethrow;
     } finally {
       if (!pausedOnInterrupt) {
         if (injectedInputEvent != null) {

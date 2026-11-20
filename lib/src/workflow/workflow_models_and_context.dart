@@ -127,9 +127,51 @@ class RetryConfig {
 
   /// Optional retry filter by exception class name or exact [Type].
   ///
-  /// A `null` value retries all thrown exceptions until [maxAttempts] is
-  /// reached. An empty list retries none.
+  /// A `null` value retries all thrown exceptions except
+  /// [WorkflowConfigurationError] and [WorkflowInvariantError], which are
+  /// never retried. An empty list retries none.
   final List<Object>? exceptions;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    if (other is! RetryConfig) {
+      return false;
+    }
+    if (maxAttempts != other.maxAttempts ||
+        initialDelay != other.initialDelay ||
+        maxDelay != other.maxDelay ||
+        backoffMultiplier != other.backoffMultiplier ||
+        jitter != other.jitter) {
+      return false;
+    }
+    final List<Object>? a = exceptions;
+    final List<Object>? b = other.exceptions;
+    if (a == null || b == null) {
+      return a == b;
+    }
+    if (a.length != b.length) {
+      return false;
+    }
+    for (int i = 0; i < a.length; i += 1) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    maxAttempts,
+    initialDelay,
+    maxDelay,
+    backoffMultiplier,
+    jitter,
+    exceptions == null ? null : Object.hashAll(exceptions!),
+  );
 }
 
 /// Error thrown when a node exceeds its timeout.
@@ -297,6 +339,8 @@ class WorkflowContext {
   Object? _directOutput;
   bool _outputDelegated = false;
   bool _failedInDynamicChild = false;
+  bool _failedInWorkflowChild = false;
+  bool _callerFinished = false;
   final Map<String, int> _childRunCounters = <String, int>{};
   BaseNode? _currentNode;
   String? _currentNodeKey;
@@ -343,6 +387,11 @@ class WorkflowContext {
 
   /// Currently executing node in this workflow context, if any.
   BaseNode? get node => _currentNode;
+
+  /// Current 1-based attempt count for the executing node.
+  int get attemptCount =>
+      (_currentNodeKey != null ? nodeStates[_currentNodeKey]?.attemptCount : null) ??
+      1;
 
   /// Path of the currently executing node within its workflow.
   String get nodePath {
@@ -557,6 +606,8 @@ class WorkflowContext {
           ? Map<String, Object?>.from(state!.resumeInputs)
           : const <String, Object?>{},
     );
+    final Completer<void> tracker = Completer<void>();
+    _cancellation.pendingDynamicChildren.add(tracker.future);
     final Object? rawOutput;
     try {
       rawOutput = await _runNodeWithRetry(
@@ -568,6 +619,10 @@ class WorkflowContext {
         parentKey: parentKey,
       );
     } on NodeInterruptedError catch (error) {
+      _cancellation.pendingDynamicChildren.remove(tracker.future);
+      if (!tracker.isCompleted) {
+        tracker.complete();
+      }
       interruptIds
         ..addAll(childContext.interruptIds)
         ..addAll(error.interruptIds);
@@ -575,9 +630,22 @@ class WorkflowContext {
         rethrow;
       }
       return outputs[stateKey];
-    } catch (_) {
+    } catch (error, stackTrace) {
+      _cancellation.pendingDynamicChildren.remove(tracker.future);
+      if (_callerFinished) {
+        _cancellation.recordDetachedError(error, stackTrace);
+      }
+      if (!tracker.isCompleted) {
+        tracker.complete();
+      }
       _failedInDynamicChild = true;
       rethrow;
+    } finally {
+      childContext._callerFinished = true;
+    }
+    _cancellation.pendingDynamicChildren.remove(tracker.future);
+    if (!tracker.isCompleted) {
+      tracker.complete();
     }
     if (branch != null) {
       nodeStates[stateKey]?.branch = branch;
@@ -703,11 +771,29 @@ class WorkflowContext {
   void _cancel(Object? reason) {
     _cancellation.cancel(reason);
   }
+
+  Future<void> _awaitDetachedDynamicChildren() async {
+    while (_cancellation.pendingDynamicChildren.isNotEmpty) {
+      final List<Future<void>> batch = List<Future<void>>.from(
+        _cancellation.pendingDynamicChildren,
+      );
+      await Future.wait<void>(batch);
+    }
+    if (_cancellation.firstDetachedError != null) {
+      Error.throwWithStackTrace(
+        _cancellation.firstDetachedError!,
+        _cancellation.firstDetachedStackTrace!,
+      );
+    }
+  }
 }
 
 class _WorkflowCancelToken {
   bool cancelled = false;
   Object? reason;
+  final List<Future<void>> pendingDynamicChildren = <Future<void>>[];
+  Object? firstDetachedError;
+  StackTrace? firstDetachedStackTrace;
 
   void cancel(Object? reason) {
     if (cancelled) {
@@ -715,6 +801,11 @@ class _WorkflowCancelToken {
     }
     cancelled = true;
     this.reason = reason;
+  }
+
+  void recordDetachedError(Object error, StackTrace stackTrace) {
+    firstDetachedError ??= error;
+    firstDetachedStackTrace ??= stackTrace;
   }
 }
 

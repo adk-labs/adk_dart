@@ -223,7 +223,11 @@ Future<Object?> _runNodeWithRetry({
   String? runId,
   String? parentKey,
 }) async {
-  final RetryConfig? retry = node.retryConfig;
+  final RetryConfig? retry =
+      node.retryConfig ??
+      (node is AgentNode && node.agent is Workflow
+          ? (node.agent as Workflow).retryConfig
+          : null);
   _validateRetryExceptionFilters(retry);
   final int maxAttempts = retry == null
       ? 1
@@ -258,6 +262,7 @@ Future<Object?> _runNodeWithRetry({
     _updateNodeStatus(context, state, NodeStatus.running);
     state.attemptCount = attempt;
     context._failedInDynamicChild = false;
+    context._failedInWorkflowChild = false;
     final Map<String, int> countersAtStart = Map<String, int>.from(
       context._childRunCounters,
     );
@@ -311,12 +316,14 @@ Future<Object?> _runNodeWithRetry({
       rethrow;
     } catch (error) {
       final bool failedInChild = context._failedInDynamicChild;
+      final bool failedInWorkflowChild = context._failedInWorkflowChild;
       lastError = error;
-      _updateNodeStatus(context, state, NodeStatus.failed);
-      state.error = error;
       if (attempt >= maxAttempts ||
           (failedInChild && node is ParallelWorker) ||
+          failedInWorkflowChild ||
           !_shouldRetryError(error, retry)) {
+        _updateNodeStatus(context, state, NodeStatus.failed);
+        state.error = error;
         rethrow;
       }
       _resetDynamicChildrenForRetry(
