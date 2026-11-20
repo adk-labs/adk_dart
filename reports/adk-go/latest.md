@@ -1,193 +1,154 @@
 # ADK Go Daily Change Report
 
-- Date (UTC): 2026-11-19
+- Date (UTC): 2026-11-20
 - Source: `google/adk-go`
-- Latest SHA: `cfc650b00f63c989a2a5f5fb03c28a8cd60ceb2e`
-- Previous SHA: `f01ccf8724d45c25e6d0a0edac01a04945f3d147`
+- Latest SHA: `3f5d74d36e3f5c734904516bc83fd1b8556722dc`
+- Previous SHA: `cfc650b00f63c989a2a5f5fb03c28a8cd60ceb2e`
 
 ## Summary
 
-- New commits: 19
+- New commits: 11
 
 ## Commits
 
-- [cfc650b](https://github.com/google/adk-go/commit/cfc650b00f63c989a2a5f5fb03c28a8cd60ceb2e) fix(session/vertexai): skip nil parts when converting events for storage (#2394) (Harsh Arora, 2026-11-20)
-- [b4383d8](https://github.com/google/adk-go/commit/b4383d8e7670f67816a3badc5d589ee0bf5144cc) fix(agentanalytics): add retired-activation ledger and credit bounds (#2389) (Haiyuan Cao, 2026-11-19)
-- [0fe0615](https://github.com/google/adk-go/commit/0fe061559cb0101d2969da12d327b0424bee40d2) feat(agentanalytics): add event provenance, context walkers, and callback stack helpers (#2380) (Haiyuan Cao, 2026-11-19)
-- [b758093](https://github.com/google/adk-go/commit/b758093d84f3c9097f9e0d3d21d5d1461d764b4e) fix(agentanalytics): suppress recovered tool completions and log retryandreflect errors (#2381) (Haiyuan Cao, 2026-11-19)
-- [98275d2](https://github.com/google/adk-go/commit/98275d2f97cabfc3b71d4ef63050b6ac29c659fd) feat(agentanalytics): add ToolResultClassifier hook and schema lifecycle callbacks (#2180) (Haiyuan Cao, 2026-11-19)
-- [3559cd8](https://github.com/google/adk-go/commit/3559cd80a15608605f9113a89c9826ac899e53dd) feat(tool/skilltoolset/skill): add an in-memory skill source (#2395) (Artsiom Shut, 2026-11-19)
-- [6b4c6d5](https://github.com/google/adk-go/commit/6b4c6d558c3794da5a7ff2a1423a6263405ddd53) feat(skill_registy): Skill registry support (#1732) (Karol Droste, 2026-11-19)
-- [d6b0cf2](https://github.com/google/adk-go/commit/d6b0cf2b81a2f63ab95e01718717bdaf4877dc99) test: cover context cache guards that no test fails without (#2421) (wolo, 2026-11-19)
-- [bd7f179](https://github.com/google/adk-go/commit/bd7f1798e965ec194770e78262afc77bf7111d41) fix(telemetry): export OTLP metrics on explicit shutdown (#2200) (Zerui Ge, 2026-11-19)
-- [dcb7ad9](https://github.com/google/adk-go/commit/dcb7ad905225ff7027fa97b0156073dfd6770d74) fix: drop null parts from REST requests and skip nil parts on read (#1769) (Trainingcqy, 2026-11-19)
-- [10a4650](https://github.com/google/adk-go/commit/10a4650e82b3d8f46685b30eee9c963aca5848af) fix(memory): split mixed-script search queries like stored text (#2400) (Karthik Thota, 2026-11-19)
-- [6d4bc2b](https://github.com/google/adk-go/commit/6d4bc2bd1907ccf6b2845e5c554319d805b75874) refactor: cleanup codebase (#2368) (Oleksandr Redko, 2026-11-19)
-- [75163c6](https://github.com/google/adk-go/commit/75163c68a51cf435ad24070b109d1a80ba08315f) fix(sequentialagent): complete live-session shutdown (#1770) (Ziming Wang, 2026-11-19)
-- [4a734d2](https://github.com/google/adk-go/commit/4a734d2b0167600c5c5ec675611ec0c3269543a5) fix(instructionutil): resolve placeholders from callback and tool contexts (#2401) (Karthik Thota, 2026-11-19)
-- [faab8f1](https://github.com/google/adk-go/commit/faab8f18001c35b8b4728bf0940e24114946ee5a) fix(workflow): do not carry a consumed answer over to a node's next pause (#2330) (Melon, 2026-11-19)
-- [14daf2c](https://github.com/google/adk-go/commit/14daf2ccb7ba66170bc01bdbc3aa3fe8ccf514ca) fix(agentanalytics): harden Close/afterRun lifecycle and defer late-settled retirement (#2375) (Haiyuan Cao, 2026-11-19)
-- [3277eb6](https://github.com/google/adk-go/commit/3277eb6b835c3c466544f34f36edbb0dd0f56712) fix(parallelagent): stop sibling branches when a sub-agent escalates (#1781) (Anzal Husain Abidi, 2026-11-19)
-- [e15287f](https://github.com/google/adk-go/commit/e15287fae12bed0c9a561f78b6a3e62f27138c51) feat(agentanalytics): add pre-built agent evaluation views (v_eval_session, v_eval_turn) (#2175) (Haiyuan Cao, 2026-11-19)
-- [3156d7b](https://github.com/google/adk-go/commit/3156d7b86a40deaba0af3d60c4f084accda936a3) feat(model/gemini): add context cache lifecycle management for agent sessions (#1951) (Karthik Thota, 2026-11-19)
+- [3f5d74d](https://github.com/google/adk-go/commit/3f5d74d36e3f5c734904516bc83fd1b8556722dc) fix(runner): start invocation spans before plugin callbacks (#1898) (ktsoator, 2026-11-21)
+- [aed66ba](https://github.com/google/adk-go/commit/aed66baf489976de2dc1eb9726efb38a6d124689) fix(llminternal): don't replay history into a resumed live session (#2370) (Atul Joshi, 2026-11-20)
+- [aa80163](https://github.com/google/adk-go/commit/aa801636b8c6bcfea0330f92e24d64f394ccfdd8) fix(model/anthropicmodel): report a content-less refusal or truncation as a model error (#2434) (Karthik Thota, 2026-11-20)
+- [7cb18f2](https://github.com/google/adk-go/commit/7cb18f28d5a21054e08deb43d8cfb4404586f353) fix(agentengine): preserve events without content (#2140) (ktsoator, 2026-11-20)
+- [8cacb10](https://github.com/google/adk-go/commit/8cacb10e0feec3f7f086f8b34d23838f9d86ba00) fix(artifact): number artifact versions from 0 and use *int64 for optional versions (#2411) (Artsiom Shut, 2026-11-20)
+- [bfb63ad](https://github.com/google/adk-go/commit/bfb63ada27c1cb546a2ff48861d45a60b9f4b76a) feat(toolcallintegrityplugin): added support for ToolCallIntegrityPlugin (#2280) (Karol Droste, 2026-11-20)
+- [ae3b8c4](https://github.com/google/adk-go/commit/ae3b8c4e2dbf0441e0e7f80556460b570d71caff) ci(release): name PR authors in the changelog (#2372) (Jan Wojtas, 2026-11-20)
+- [8ce0838](https://github.com/google/adk-go/commit/8ce0838cdc58387e8725238ac091c4b4c6882c7f) feat(auth/gcp): follow adk-python's client certificate rule and select the mTLS endpoints (#2408) (wolo, 2026-11-20)
+- [26f36ba](https://github.com/google/adk-go/commit/26f36ba47fd168d949d9dd656d10c6a473dd6bc3) fix(llminternal): recover panics in tool callbacks and in tools not built with functiontool (#2393) (Trainingcqy, 2026-11-20)
+- [e09d5b8](https://github.com/google/adk-go/commit/e09d5b8804a10da3c7ba92510614a2ec92324639) refactor(agentanalytics)!: unexport internal transport/truncation helpers and guard struct literals for v1.0.0 (#2181) (Haiyuan Cao, 2026-11-20)
+- [f2b4f99](https://github.com/google/adk-go/commit/f2b4f99ba02110a8de39f81db60b3ed9a14baf2a) feat(tool/bigquerytoolset): add execute_sql in read-only mode (#2209) (Gangavarapu Vivek, 2026-11-20)
 
 ## Changed Files
 
-- `M	.golangci.yml`
-- `M	agent/common_context_test.go`
-- `M	agent/llmagent/llmagent_delegation_test.go`
-- `M	agent/llmagent/llmagent_test.go`
-- `M	agent/llmagent/state_agent_test.go`
-- `M	agent/remoteagent/v2/a2a_agent.go`
-- `M	agent/remoteagent/v2/a2a_agent_run_processor_test.go`
-- `M	agent/remoteagent/v2/a2a_e2e_test.go`
-- `M	agent/remoteagent/v2/utils.go`
-- `M	agent/workflowagents/loopagent/agent.go`
-- `M	agent/workflowagents/parallelagent/agent.go`
-- `M	agent/workflowagents/parallelagent/agent_test.go`
-- `M	agent/workflowagents/sequentialagent/agent.go`
-- `M	agent/workflowagents/sequentialagent/agent_test.go`
+- `M	.github/release-please-config-v1.json`
+- `M	.github/release-please-config.json`
+- `M	.github/workflows/release.yml`
+- `M	agent/agent.go`
+- `M	agent/callback_context_wrapper_test.go`
+- `M	agent/identity_matrix_test.go`
+- `M	artifact/artifact_util.go`
+- `M	artifact/artifact_util_test.go`
+- `M	artifact/gcsartifact/gcs_test.go`
 - `M	artifact/gcsartifact/service.go`
 - `M	artifact/inmemory.go`
+- `M	artifact/inmemory_references_test.go`
+- `M	artifact/inmemory_test.go`
+- `M	artifact/service.go`
 - `M	auth/gcp/client.go`
-- `A	examples/contextcache/README.md`
-- `A	examples/contextcache/main.go`
-- `M	examples/multiagent/single_turn/main.go`
-- `A	examples/skillregistry/main.go`
-- `M	go.mod`
-- `M	internal/cli/util/text_helpers.go`
-- `M	internal/configurable/conformance/functions.go`
-- `M	internal/configurable/conformance/loader.go`
-- `M	internal/credredirect/credredirect.go`
+- `A	auth/gcp/client_mtls_test.go`
+- `M	auth/gcp/client_test.go`
+- `M	auth/gcp/provider.go`
+- `M	auth/gcp/provider_test.go`
+- `A	exp/toolcallintegrity/toolcallintegrity.go`
+- `A	exp/toolcallintegrity/toolcallintegrity_test.go`
+- `M	internal/artifact/artifacts.go`
+- `M	internal/artifact/artifacts_test.go`
+- `M	internal/artifact/forwarding.go`
+- `M	internal/artifact/forwarding_test.go`
+- `M	internal/artifact/tests/service_suite.go`
+- `A	internal/clientcert/clientcert.go`
+- `A	internal/clientcert/clientcert_test.go`
+- `A	internal/clientcert/clientcerttest/clientcerttest.go`
+- `A	internal/clientcert/clientcerttest/clientcerttest_test.go`
+- `M	internal/llminternal/audio_cache_manager_test.go`
 - `M	internal/llminternal/base_flow.go`
-- `M	internal/llminternal/basic_processor.go`
-- `M	internal/llminternal/contents_processor.go`
-- `M	internal/llminternal/contents_processor_test.go`
-- `A	internal/llminternal/context_cache_lifecycle.go`
-- `A	internal/llminternal/context_cache_lifecycle_test.go`
-- `A	internal/llminternal/context_cache_processor.go`
-- `A	internal/llminternal/context_cache_processor_test.go`
-- `M	internal/llminternal/instruction_processor.go`
-- `M	internal/llminternal/instruction_processor_test.go`
-- `M	internal/llminternal/stream_aggregator.go`
+- `M	internal/llminternal/base_flow_test.go`
+- `M	internal/llminternal/live_reconnect_test.go`
 - `M	internal/llminternal/streaming_tool_test.go`
-- `M	internal/ranksearch/bm25.go`
-- `M	internal/telemetry/logger.go`
-- `M	internal/testutil/test_agent_runner.go`
-- `A	internal/utils/error_relay.go`
-- `A	internal/utils/error_relay_test.go`
-- `M	internal/utils/fs.go`
-- `M	internal/utils/fs_test.go`
-- `M	internal/utils/schema_canonical.go`
-- `M	internal/utils/schema_utils.go`
-- `M	memory/inmemory.go`
-- `M	memory/inmemory_search_test.go`
-- `M	model/anthropicmodel/request.go`
+- `M	internal/telemetry/functionaltest/testdata/delegation/event_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/delegation/no_content-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/delegation/span_and_event-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/delegation/span_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/dynamic-node-error-event_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/dynamic-node-error-no_content-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/dynamic-node-error-span_and_event-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/dynamic-node-error-span_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/event_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/first-agent-error-event_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/first-agent-error-no_content-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/first-agent-error-span_and_event-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/first-agent-error-span_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/no_content-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/second-agent-error-event_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/second-agent-error-no_content-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/second-agent-error-span_and_event-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/second-agent-error-span_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/span_and_event-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/span_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/static-node-error-event_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/static-node-error-no_content-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/static-node-error-span_and_event-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/dynamicworkflow/static-node-error-span_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/streaming/event_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/streaming/no_content-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/streaming/span_and_event-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/streaming/span_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/toolcall/event_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/toolcall/inference-error-event_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/toolcall/inference-error-no_content-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/toolcall/inference-error-span_and_event-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/toolcall/inference-error-span_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/toolcall/no_content-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/toolcall/span_and_event-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/toolcall/span_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/toolcall/tool-error-event_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/toolcall/tool-error-no_content-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/toolcall/tool-error-span_and_event-otel_semconv_1_36.json`
+- `M	internal/telemetry/functionaltest/testdata/toolcall/tool-error-span_only-otel_semconv_1_36.json`
+- `M	internal/telemetry/instrumentation.go`
+- `M	internal/telemetry/instrumentation_test.go`
+- `M	internal/telemetry/node_tracing.go`
+- `M	internal/telemetry/telemetry.go`
+- `M	internal/toolinternal/tool.go`
+- `M	model/anthropicmodel/anthropicmodel_test.go`
+- `M	model/anthropicmodel/doc.go`
 - `M	model/anthropicmodel/response.go`
-- `M	model/anthropicmodel/stream.go`
-- `A	model/cache.go`
-- `A	model/cache_test.go`
-- `A	model/gemini/context_cache.go`
-- `A	model/gemini/context_cache_test.go`
-- `M	model/gemini/gemini.go`
-- `M	model/llm.go`
-- `M	model/openaimodel/internal/completions/request.go`
-- `M	model/openaimodel/internal/responses/model.go`
-- `M	model/openaimodel/internal/responses/request.go`
-- `M	model/openaimodel/internal/responses/request_test.go`
-- `M	model/openaimodel/internal/responses/response.go`
-- `M	model/openaimodel/internal/shared/schema.go`
-- `A	plugin/agentanalytics/after_agent_events_test.go`
-- `M	plugin/agentanalytics/arrow_test_helper_test.go`
+- `A	plugin/agentanalytics/api_surface_test.go`
+- `M	plugin/agentanalytics/batch_processor.go`
+- `M	plugin/agentanalytics/batch_processor_test.go`
 - `M	plugin/agentanalytics/bigquery_agent_analytics_plugin.go`
 - `M	plugin/agentanalytics/bigquery_agent_analytics_plugin_test.go`
 - `M	plugin/agentanalytics/config.go`
-- `M	plugin/agentanalytics/doc.go`
-- `M	plugin/agentanalytics/doc_test.go`
-- `M	plugin/agentanalytics/events.go`
-- `M	plugin/agentanalytics/events_test.go`
+- `M	plugin/agentanalytics/gcs_offloader.go`
 - `M	plugin/agentanalytics/gcs_offloader_test.go`
-- `M	plugin/agentanalytics/go.mod`
-- `M	plugin/agentanalytics/go.sum`
+- `M	plugin/agentanalytics/json_formatter.go`
+- `M	plugin/agentanalytics/json_formatter_test.go`
 - `M	plugin/agentanalytics/redaction.go`
-- `M	plugin/agentanalytics/redaction_backstop.go`
-- `M	plugin/agentanalytics/redaction_keys.go`
-- `M	plugin/agentanalytics/redaction_nested.go`
-- `M	plugin/agentanalytics/redaction_spans.go`
-- `A	plugin/agentanalytics/schema_callbacks_test.go`
-- `M	plugin/agentanalytics/schema_upgrade.go`
-- `M	plugin/agentanalytics/schema_upgrade_test.go`
-- `A	plugin/agentanalytics/tool_result_classifier_test.go`
+- `M	plugin/agentanalytics/redaction_base_parity_test.go`
+- `M	plugin/agentanalytics/redaction_regression_test.go`
+- `M	plugin/agentanalytics/redaction_test.go`
+- `A	plugin/agentanalytics/removed_exports_test.go`
+- `M	plugin/agentanalytics/schema.go`
 - `M	plugin/agentanalytics/trace_manager.go`
 - `M	plugin/agentanalytics/trace_manager_test.go`
 - `M	plugin/agentanalytics/views.go`
 - `M	plugin/agentanalytics/views_test.go`
-- `M	plugin/loggingplugin/logging_plugin.go`
-- `M	plugin/loggingplugin/logging_plugin_test.go`
-- `M	runner/agent_node.go`
-- `A	runner/context_cache_nested_test.go`
-- `A	runner/context_cache_test.go`
+- `M	plugin/retryandreflect/plugin.go`
+- `M	runner/compaction_test.go`
 - `M	runner/live_runner_test.go`
-- `M	runner/run_node.go`
-- `M	runner/run_node_test.go`
 - `M	runner/runner.go`
-- `M	runner/workflow_function_response_test.go`
-- `M	server/adka2a/executor.go`
-- `M	server/adka2a/v2/executor_test.go`
-- `M	server/adka2a/v2/input_required.go`
-- `M	server/adkrest/controllers/debug.go`
-- `M	server/adkrest/controllers/runtime.go`
-- `M	server/adkrest/controllers/runtime_live_test.go`
-- `M	server/adkrest/controllers/runtime_test.go`
-- `M	server/adkrest/controllers/sessions.go`
-- `M	server/adkrest/controllers/sessions_test.go`
-- `M	server/adkrest/internal/services/agentgraphgenerator.go`
+- `A	runner/tracing_lifecycle_test.go`
+- `A	runner/tracing_test.go`
+- `M	server/adkrest/controllers/artifacts.go`
+- `M	server/adkrest/controllers/artifacts_test.go`
+- `A	server/agentengine/controllers/method/stream_events_test.go`
+- `M	server/agentengine/controllers/method/stream_query.go`
+- `M	server/agentengine/controllers/method/streaming_agent_run_with_events.go`
+- `M	server/agentengine/internal/helper/emit_json.go`
 - `M	server/agentengine/internal/helper/encode.go`
 - `M	server/agentengine/internal/helper/encode_test.go`
-- `M	session/database/service.go`
-- `M	session/database/service_test.go`
-- `M	session/database/storage_session.go`
-- `M	session/event_json_test.go`
-- `M	session/vertexai/append_event_temp_state_test.go`
-- `M	session/vertexai/raw_event_crossruntime_test.go`
-- `M	session/vertexai/vertexai_client.go`
-- `M	session/vertexai/vertexai_test.go`
-- `M	telemetry/metric_reader.go`
-- `M	telemetry/setup_otel.go`
-- `M	telemetry/telemetry_test.go`
-- `M	tool/mcptoolset/client_cancellation_test.go`
-- `M	tool/mcptoolset/set_test.go`
-- `M	tool/skilltoolset/skill/complete_preload.go`
-- `M	tool/skilltoolset/skill/frontmatter_preload.go`
-- `A	tool/skilltoolset/skill/in_memory_source.go`
-- `A	tool/skilltoolset/skill/in_memory_source_test.go`
-- `A	tool/skilltoolset/skill/skillregistry/cache.go`
-- `A	tool/skilltoolset/skill/skillregistry/client.go`
-- `A	tool/skilltoolset/skill/skillregistry/client_test.go`
-- `A	tool/skilltoolset/skill/skillregistry/simplecache/cache.go`
-- `A	tool/skilltoolset/skill/skillregistry/simplecache/cache_test.go`
-- `A	tool/skilltoolset/skill/skillregistry/simplecache/cached_data.go`
-- `A	tool/skilltoolset/skill/skillregistry/simplecache/cached_data_test.go`
-- `A	tool/skilltoolset/skill/skillregistry/simplecache/cached_resource.go`
-- `A	tool/skilltoolset/skill/skillregistry/simplecache/cached_resource_test.go`
-- `A	tool/skilltoolset/skill/skillregistry/simplecache/cached_skill.go`
-- `A	tool/skilltoolset/skill/skillregistry/simplecache/cached_skill_test.go`
-- `A	tool/skilltoolset/skill/skillregistry/simplecache/cached_source.go`
-- `A	tool/skilltoolset/skill/skillregistry/simplecache/cached_source_test.go`
-- `A	tool/skilltoolset/skill/skillregistry/source.go`
-- `A	tool/skilltoolset/skill/skillregistry/source_test.go`
-- `M	tool/toolauth/model_json.go`
-- `M	util/instructionutil/instruction.go`
-- `A	util/instructionutil/instruction_test.go`
-- `M	workflow/branch.go`
-- `M	workflow/branch_isolation_test.go`
-- `M	workflow/edgebuilder.go`
-- `M	workflow/join_node_test.go`
-- `M	workflow/parallel_worker_branch_test.go`
-- `M	workflow/persistence.go`
-- `M	workflow/persistence_test.go`
-- `M	workflow/resume.go`
-- `M	workflow/scheduler.go`
-- `M	workflow/scheduler_test.go`
-- `M	workflow/workflow.go`
-- `M	workflow/workflow_node.go`
+- `M	tool/agenttool/agent_tool_artifacts_test.go`
+- `M	tool/bigquerytoolset/client.go`
+- `M	tool/bigquerytoolset/config.go`
+- `A	tool/bigquerytoolset/descriptions/execute_sql.txt`
+- `M	tool/bigquerytoolset/doc.go`
+- `A	tool/bigquerytoolset/query.go`
+- `A	tool/bigquerytoolset/query_test.go`
+- `A	tool/bigquerytoolset/rows.go`
+- `M	tool/bigquerytoolset/toolset.go`
+- `M	tool/bigquerytoolset/toolset_test.go`
