@@ -73,6 +73,9 @@ const String adkExperimentalGroundingWebSearchQueries =
 const String adkExperimentalGroundingSourceUris =
     'adk.experimental.grounding.source_uris';
 
+/// Attribute key recording the model version that served the LLM response.
+const String genAiResponseModel = 'gen_ai.response.model';
+
 /// Alias for [TraceSpanRecord].
 typedef TraceSpan = TraceSpanRecord;
 
@@ -639,6 +642,14 @@ void traceCallLlm(
     captureContent: _shouldAddRequestResponseToSpans(environment: environment),
     environment: environment,
   );
+  final String? responseModel = _responseModel(
+    invocationContext,
+    llmResponse,
+    llmRequest,
+  );
+  if (responseModel != null && responseModel.isNotEmpty) {
+    targetSpan.setAttribute(genAiResponseModel, responseModel);
+  }
 
   final String? finishReason = llmResponse.finishReason;
   if (finishReason != null && finishReason.isNotEmpty) {
@@ -1018,6 +1029,7 @@ Future<T> useInferenceSpan<T>(
     requestModel: llmRequest.model,
     systemName: systemName,
     startTimeMicros: DateTime.now().microsecondsSinceEpoch,
+    llmRequest: llmRequest,
   );
 
   Object? caughtError;
@@ -1156,7 +1168,9 @@ class GenerateContentSpan {
     this.serverAddress,
     this.serverPort,
     int? startTimeMicros,
-  }) : startTimeMicros =
+    LlmRequest? llmRequest,
+  }) : _llmRequest = llmRequest,
+       startTimeMicros =
            startTimeMicros ?? DateTime.now().microsecondsSinceEpoch;
 
   /// Underlying trace span.
@@ -1176,6 +1190,11 @@ class GenerateContentSpan {
 
   /// Optional server port for this inference span.
   final int? serverPort;
+
+  final LlmRequest? _llmRequest;
+
+  /// The [LlmRequest] associated with this inference span, if available.
+  LlmRequest? get llmRequest => _llmRequest;
 
   /// Start timestamp of the inference span in microseconds.
   int startTimeMicros;
@@ -1279,6 +1298,10 @@ void traceGenerateContentResult(
     return;
   }
 
+  final String? modelVersion = llmResponse.modelVersion;
+  if (modelVersion != null && modelVersion.isNotEmpty) {
+    span.setAttribute(genAiResponseModel, modelVersion);
+  }
   final String? finishReason = llmResponse.finishReason;
   if (finishReason != null && finishReason.isNotEmpty) {
     span.setAttribute('gen_ai.response.finish_reasons', <String>[
@@ -1295,13 +1318,16 @@ void traceGenerateContentResult(
 void traceInferenceResult(
   Object? span,
   LlmResponse llmResponse, {
+  InvocationContext? invocationContext,
   Map<String, String>? environment,
 }) {
   GenerateContentSpan? generateContentSpan;
   TraceSpanRecord? targetSpan;
+  LlmRequest? llmRequest;
 
   if (span is GenerateContentSpan) {
     generateContentSpan = span;
+    llmRequest = span._llmRequest;
     targetSpan = span.span;
     if (llmResponse.partial != true) {
       span.responses.add(llmResponse);
@@ -1317,11 +1343,22 @@ void traceInferenceResult(
     return;
   }
 
+  final InvocationContext? effectiveInvocationContext =
+      invocationContext ?? generateContentSpan?.invocationContext;
+
   final String? finishReason = llmResponse.finishReason;
   if (finishReason != null && finishReason.isNotEmpty) {
     targetSpan.setAttribute('gen_ai.response.finish_reasons', <String>[
       finishReason.toLowerCase(),
     ]);
+  }
+  final String? responseModel = _responseModel(
+    effectiveInvocationContext,
+    llmResponse,
+    llmRequest,
+  );
+  if (responseModel != null && responseModel.isNotEmpty) {
+    targetSpan.setAttribute(genAiResponseModel, responseModel);
   }
   _setUsageMetadataAttributes(targetSpan, llmResponse.usageMetadata);
   _setContextCacheAttributes(
@@ -1338,10 +1375,8 @@ void traceInferenceResult(
     environment: environment,
   );
 
-  final TelemetryConfig telemetryConfig = generateContentSpan != null
-      ? telemetryConfigFromInvocationContext(
-          generateContentSpan.invocationContext,
-        )
+  final TelemetryConfig telemetryConfig = effectiveInvocationContext != null
+      ? telemetryConfigFromInvocationContext(effectiveInvocationContext)
       : const TelemetryConfig();
   if (telemetryConfig.shouldUseExperimentalGenAiSemconv(
         environment: environment,
@@ -1360,7 +1395,8 @@ void traceInferenceResult(
 
   _emitChoiceLog(
     llmResponse,
-    invocationContext: generateContentSpan?.invocationContext,
+    invocationContext: effectiveInvocationContext,
+    llmRequest: llmRequest,
     environment: environment,
   );
   if (finishReason != null && finishReason.isNotEmpty) {
@@ -2129,6 +2165,7 @@ void _emitStablePromptLogs(
 void _emitChoiceLog(
   LlmResponse llmResponse, {
   InvocationContext? invocationContext,
+  LlmRequest? llmRequest,
   Map<String, String>? environment,
 }) {
   final Map<String, Object?> body = <String, Object?>{
@@ -2150,6 +2187,7 @@ void _emitChoiceLog(
         'gen_ai.system': _inferenceSystemName(
           invocationContext,
           llmResponse,
+          llmRequest: llmRequest,
           environment: environment,
         ),
       },
@@ -2493,9 +2531,30 @@ String _resolveGenAiSystemName(
   return _genAiSystemNameFromModel(model, environment: environment) ?? '_other';
 }
 
+String? _responseModel(
+  InvocationContext? invocationContext,
+  LlmResponse llmResponse, [
+  LlmRequest? llmRequest,
+]) {
+  final String? modelVersion = llmResponse.modelVersion;
+  if (modelVersion != null && modelVersion.isNotEmpty) {
+    return modelVersion;
+  }
+  final String? requestModel = llmRequest?.model;
+  if (requestModel != null && requestModel.isNotEmpty) {
+    return requestModel;
+  }
+  final BaseAgent? agent = invocationContext?.agent;
+  if (agent != null) {
+    return _agentModelName(agent);
+  }
+  return null;
+}
+
 String _inferenceSystemName(
   InvocationContext? invocationContext,
   LlmResponse llmResponse, {
+  LlmRequest? llmRequest,
   Map<String, String>? environment,
 }) {
   final String? fromResponse = _genAiSystemNameFromModel(
@@ -2505,16 +2564,16 @@ String _inferenceSystemName(
   if (fromResponse != null) {
     return fromResponse;
   }
-  final BaseAgent? agent = invocationContext?.agent;
-  if (agent is LlmAgent) {
-    final String? modelName = _agentModelName(agent);
-    final String? fromAgent = _genAiSystemNameFromModel(
-      modelName,
-      environment: environment,
-    );
-    if (fromAgent != null) {
-      return fromAgent;
-    }
+  String? model = llmRequest?.model;
+  if ((model == null || model.isEmpty) && invocationContext != null) {
+    model = _agentModelName(invocationContext.agent);
+  }
+  final String? fromFallback = _genAiSystemNameFromModel(
+    model,
+    environment: environment,
+  );
+  if (fromFallback != null) {
+    return fromFallback;
   }
   return 'gcp.vertex.agent';
 }

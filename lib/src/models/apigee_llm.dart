@@ -15,6 +15,7 @@ import '../utils/system_environment/system_environment.dart';
 import 'google_llm.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
+import 'malformed_function_calls.dart';
 
 const String _apigeeProxyUrlEnv = 'APIGEE_PROXY_URL';
 const String _projectEnv = 'GOOGLE_CLOUD_PROJECT';
@@ -364,15 +365,17 @@ class _ChatCompletionsChunkCollection {
           ),
         );
       } else {
+        final List<Object?> malformedCalls = _popMalformedToolCalls();
+        final LlmResponse finalResponse = LlmResponse(
+          content: Content(role: _role, parts: _finalParts()),
+          finishReason: ApigeeLlm._mapFinishReason(finishReason),
+          modelVersion: _model,
+          usageMetadata: _mapUsage(_usage),
+          customMetadata: _customMetadata(),
+          turnComplete: true,
+        );
         responses.add(
-          LlmResponse(
-            content: Content(role: _role, parts: _finalParts()),
-            finishReason: ApigeeLlm._mapFinishReason(finishReason),
-            modelVersion: _model,
-            usageMetadata: _mapUsage(_usage),
-            customMetadata: _customMetadata(),
-            turnComplete: true,
-          ),
+          reportMalformedFunctionCalls(finalResponse, malformedCalls),
         );
       }
       _lastToolCallIndex = null;
@@ -485,22 +488,29 @@ class _ChatCompletionsChunkCollection {
       state.id = id;
     }
     final Map<String, Object?> function = _asMap(toolCall['function']);
-    final String name = '${function['name'] ?? ''}';
-    if (name.isNotEmpty && name != 'null') {
-      state.name = name;
+    final Object? rawName = function['name'];
+    if (rawName != null) {
+      if (rawName is String && rawName.isNotEmpty) {
+        state.name = rawName;
+      } else if (rawName is! String) {
+        state.rawName = rawName;
+      }
     }
-    final String arguments = '${function['arguments'] ?? ''}';
-    if (arguments.isNotEmpty && arguments != 'null') {
+    final Object? rawArguments = function['arguments'];
+    final String arguments = rawArguments is String ? rawArguments : '';
+    if (arguments.isNotEmpty) {
       state.arguments.write(arguments);
       state.argumentDeltas.add(arguments);
     }
-    if ((state.name ?? '').isEmpty && (state.id ?? '').isEmpty) {
+    if ((state.name ?? '').isEmpty &&
+        state.rawName == null &&
+        (state.id ?? '').isEmpty) {
       return null;
     }
     return Part.fromFunctionCall(
       name: state.name ?? '',
       id: state.id,
-      partialArgs: arguments.isEmpty || arguments == 'null'
+      partialArgs: arguments.isEmpty
           ? null
           : <Map<String, Object?>>[
               <String, Object?>{'arguments': arguments},
@@ -522,6 +532,50 @@ class _ChatCompletionsChunkCollection {
     return false;
   }
 
+  List<Object?> _popMalformedToolCalls() {
+    final List<Object?> names = <Object?>[];
+    final List<int> sortedIndexes = _toolCalls.keys.toList()..sort();
+    for (final int index in sortedIndexes) {
+      final _StreamingToolCall state = _toolCalls[index]!;
+      if (_hasMalformedArguments(state)) {
+        names.add(state.name ?? state.rawName);
+        _toolCalls.remove(index);
+      }
+    }
+    return names;
+  }
+
+  bool _hasMalformedArguments(_StreamingToolCall state) {
+    final String arguments = state.argumentDeltas.join();
+    if (arguments.isEmpty) {
+      return false;
+    }
+    try {
+      return jsonDecode(arguments) is! Map;
+    } catch (_) {
+      final (Map<String, dynamic> mergedArgs, _) = _mergeToolCallDeltas(state);
+      return mergedArgs.isEmpty;
+    }
+  }
+
+  (Map<String, dynamic>, bool) _mergeToolCallDeltas(_StreamingToolCall state) {
+    final Map<String, dynamic> merged = <String, dynamic>{};
+    bool allValid = true;
+    for (final String delta in state.argumentDeltas) {
+      try {
+        final Object? decoded = jsonDecode(delta);
+        if (decoded is Map) {
+          merged.addAll(decoded.cast<String, dynamic>());
+        } else {
+          allValid = false;
+        }
+      } catch (_) {
+        allValid = false;
+      }
+    }
+    return (merged, allValid);
+  }
+
   List<Part> _finalParts() {
     final List<Part> parts = <Part>[];
     if (_content.isNotEmpty) {
@@ -530,11 +584,25 @@ class _ChatCompletionsChunkCollection {
     final List<int> sortedIndexes = _toolCalls.keys.toList()..sort();
     for (final int index in sortedIndexes) {
       final _StreamingToolCall state = _toolCalls[index]!;
+      final String joined = state.argumentDeltas.join();
+      Map<String, dynamic> args;
+      if (joined.isEmpty) {
+        args = <String, dynamic>{};
+      } else {
+        try {
+          final Object? decoded = jsonDecode(joined);
+          args = decoded is Map
+              ? decoded.cast<String, dynamic>()
+              : _mergeToolCallDeltas(state).$1;
+        } catch (_) {
+          args = _mergeToolCallDeltas(state).$1;
+        }
+      }
       parts.add(
         Part.fromFunctionCall(
           name: state.name ?? '',
           id: state.id,
-          args: _decodeArguments(state.argumentDeltas.join()),
+          args: args,
         ),
       );
     }
@@ -562,6 +630,7 @@ class _ChatCompletionsChunkCollection {
 class _StreamingToolCall {
   String? id;
   String? name;
+  Object? rawName;
   final StringBuffer arguments = StringBuffer();
   final List<String> argumentDeltas = <String>[];
 }
@@ -917,41 +986,60 @@ class ApigeeLlm extends Gemini {
       parts.add(Part.text(merged));
     }
 
-    final List<Object?> toolCalls =
-        (message['tool_calls'] as List<Object?>?) ?? <Object?>[];
-    final Map<String, Object?> functionCall = _asMap(message['function_call']);
     final String? rawFinishReason = first['finish_reason'] as String?;
     bool incompleteToolArgs = false;
-    if (rawFinishReason == 'length' &&
-        (toolCalls.isNotEmpty || functionCall.isNotEmpty)) {
-      final bool allFunctionCalls = toolCalls.every((Object? call) {
-        final Map<String, Object?> callMap = _asMap(call);
-        final Object? callType = callMap['type'];
-        return callType == null || callType == '' || callType == 'function';
-      });
-      if (allFunctionCalls) {
-        final bool invalidToolCallArgs = toolCalls.any((Object? call) {
+    List<Object?> malformedCalls = <Object?>[];
+    Map<String, Object?> effectiveMessage = message;
+    if (rawFinishReason == 'length') {
+      final List<Object?> toolCalls =
+          (message['tool_calls'] as List<Object?>?) ?? <Object?>[];
+      final Map<String, Object?> functionCall = _asMap(
+        message['function_call'],
+      );
+      if (toolCalls.isNotEmpty || functionCall.isNotEmpty) {
+        final bool allFunctionCalls = toolCalls.every((Object? call) {
           final Map<String, Object?> callMap = _asMap(call);
-          final Map<String, Object?> function = _asMap(callMap['function']);
-          return !_hasValidJsonObjectArgs(function['arguments']);
+          final Object? callType = callMap['type'];
+          return callType == null || callType == '' || callType == 'function';
         });
-        final bool invalidFunctionCallArgs =
-            functionCall.isNotEmpty &&
-            !_hasValidJsonObjectArgs(functionCall['arguments']);
-        if (invalidToolCallArgs || invalidFunctionCallArgs) {
-          incompleteToolArgs = true;
+        if (allFunctionCalls) {
+          final bool invalidToolCallArgs = toolCalls.any((Object? call) {
+            final Map<String, Object?> callMap = _asMap(call);
+            final Map<String, Object?> function = _asMap(callMap['function']);
+            return !_hasValidJsonObjectArgs(function['arguments']);
+          });
+          final bool invalidFunctionCallArgs =
+              functionCall.isNotEmpty &&
+              !_hasValidJsonObjectArgs(functionCall['arguments']);
+          if (invalidToolCallArgs || invalidFunctionCallArgs) {
+            incompleteToolArgs = true;
+          }
         }
       }
+    } else {
+      // Truncation above can corrupt the whole batch; other bad arguments
+      // spoil only their own call.
+      final (
+        Map<String, Object?> filteredMessage,
+        List<Object?> foundMalformed,
+      ) = _withoutMalformedToolCalls(message);
+      effectiveMessage = filteredMessage;
+      malformedCalls = foundMalformed;
     }
 
     if (!incompleteToolArgs) {
-      for (final Object? call in toolCalls) {
+      final List<Object?> effectiveToolCalls =
+          (effectiveMessage['tool_calls'] as List<Object?>?) ?? <Object?>[];
+      final Map<String, Object?> effectiveFunctionCall = _asMap(
+        effectiveMessage['function_call'],
+      );
+      for (final Object? call in effectiveToolCalls) {
         final Map<String, Object?> callMap = _asMap(call);
         final Map<String, Object?> function = _asMap(callMap['function']);
         parts.add(_parseFunctionCall(function, id: callMap['id']));
       }
-      if (functionCall.isNotEmpty) {
-        parts.add(_parseFunctionCall(functionCall));
+      if (effectiveFunctionCall.isNotEmpty) {
+        parts.add(_parseFunctionCall(effectiveFunctionCall));
       }
     }
 
@@ -968,7 +1056,7 @@ class ApigeeLlm extends Gemini {
         'thoughts_token_count': reasoningTokens,
     };
 
-    return LlmResponse(
+    final LlmResponse llmResponse = LlmResponse(
       modelVersion: response['model'] as String?,
       content: (incompleteToolArgs && parts.isEmpty)
           ? null
@@ -987,6 +1075,7 @@ class ApigeeLlm extends Gemini {
         'service_tier': response['service_tier'],
       }..removeWhere((Object? key, Object? value) => value == null),
     );
+    return reportMalformedFunctionCalls(llmResponse, malformedCalls);
   }
 
   static List<Map<String, Object?>> _contentToMessages(Content content) {
@@ -1271,6 +1360,54 @@ int? _readIndex(Object? value) {
   return int.tryParse('${value ?? ''}');
 }
 
+bool _isMalformedArguments(Object? arguments) {
+  if (arguments is! String || arguments.isEmpty) {
+    return false;
+  }
+  try {
+    return jsonDecode(arguments) is! Map;
+  } catch (_) {
+    return true;
+  }
+}
+
+(Map<String, Object?>, List<Object?>) _withoutMalformedToolCalls(
+  Map<String, Object?> message,
+) {
+  final List<Object?> toolCalls = <Object?>[
+    ...?((message['tool_calls'] as List<Object?>?)),
+  ];
+  final Object? legacyFunctionCall = message['function_call'];
+  if (legacyFunctionCall is Map && legacyFunctionCall.isNotEmpty) {
+    toolCalls.add(<String, Object?>{
+      'type': 'function',
+      'function': legacyFunctionCall,
+    });
+  }
+  final List<Object?> kept = <Object?>[];
+  final List<Object?> names = <Object?>[];
+  for (final Object? toolCall in toolCalls) {
+    final Map<String, Object?> callMap = _asMap(toolCall);
+    final Map<String, Object?> function = _asMap(callMap['function']);
+    final Object? callType = callMap['type'];
+    // An unsupported call type stays on its existing error path.
+    if ((callType == null || callType == 'function') &&
+        _isMalformedArguments(function['arguments'])) {
+      names.add(function['name']);
+    } else {
+      kept.add(toolCall);
+    }
+  }
+  if (names.isEmpty) {
+    return (message, names);
+  }
+  return (<String, Object?>{
+    ...message,
+    'tool_calls': kept,
+    'function_call': null,
+  }, names);
+}
+
 bool _hasValidJsonObjectArgs(Object? rawArgs) {
   if (rawArgs is! String || rawArgs.trim().isEmpty) {
     return false;
@@ -1281,21 +1418,6 @@ bool _hasValidJsonObjectArgs(Object? rawArgs) {
   } catch (_) {
     return false;
   }
-}
-
-Map<String, dynamic> _decodeArguments(String raw) {
-  if (raw.trim().isEmpty) {
-    return <String, dynamic>{};
-  }
-  try {
-    final Object? decoded = jsonDecode(raw);
-    if (decoded is Map) {
-      return decoded.cast<String, dynamic>();
-    }
-  } catch (_) {
-    return <String, dynamic>{};
-  }
-  return <String, dynamic>{};
 }
 
 Map<String, Object?>? _mapUsage(Map<String, Object?>? usage) {

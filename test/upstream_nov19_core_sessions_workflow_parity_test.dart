@@ -391,246 +391,226 @@ void main() {
     });
   });
 
-  group('5. RemoteA2aAgent streamed output without lastChunk (dbae28d3c)', () {
-    AgentCard makeCard() => AgentCard(
-      name: 'remote_agent',
-      description: 'remote',
-      url: 'https://example.invalid/a2a',
-      version: '1.0.0',
-      capabilities: AgentCapabilities(streaming: true),
-      defaultInputModes: <String>['text/plain'],
-      defaultOutputModes: <String>['text/plain'],
-      skills: <AgentSkill>[],
-    );
+  group(
+    '5. RemoteA2aAgent streamed output without lastChunk (reverted by 5523aa733)',
+    () {
+      AgentCard makeCard() => AgentCard(
+        name: 'remote_agent',
+        description: 'remote',
+        url: 'https://example.invalid/a2a',
+        version: '1.0.0',
+        capabilities: AgentCapabilities(streaming: true),
+        defaultInputModes: <String>['text/plain'],
+        defaultOutputModes: <String>['text/plain'],
+        skills: <AgentSkill>[],
+      );
 
-    test(
-      'persists streamed partial artifact chunks on TaskStatusUpdateEvent boundary',
-      () async {
-        final A2aTask workingTask = A2aTask(
-          id: 'task_1',
-          contextId: 'ctx_1',
-          status: A2aTaskStatus(state: A2aTaskState.working),
-        );
-        final A2aTask completedTask = A2aTask(
-          id: 'task_1',
-          contextId: 'ctx_1',
-          status: A2aTaskStatus(state: A2aTaskState.completed),
-        );
+      test(
+        'does not synthesize an aggregated non-partial event on TaskStatusUpdateEvent boundary when lastChunk is false',
+        () async {
+          final A2aTask workingTask = A2aTask(
+            id: 'task_1',
+            contextId: 'ctx_1',
+            status: A2aTaskStatus(state: A2aTaskState.working),
+          );
+          final A2aTask completedTask = A2aTask(
+            id: 'task_1',
+            contextId: 'ctx_1',
+            status: A2aTaskStatus(state: A2aTaskState.completed),
+          );
 
-        final _FakeA2aClient client = _FakeA2aClient(<Object>[
-          (
-            workingTask,
-            A2aTaskArtifactUpdateEvent(
-              taskId: 'task_1',
-              artifact: A2aArtifact(
-                artifactId: 'art_1',
-                parts: <A2aPart>[A2aPart.text('Hello ')],
+          final _FakeA2aClient client = _FakeA2aClient(<Object>[
+            (
+              workingTask,
+              A2aTaskArtifactUpdateEvent(
+                taskId: 'task_1',
+                artifact: A2aArtifact(
+                  artifactId: 'art_1',
+                  parts: <A2aPart>[A2aPart.text('Hello ')],
+                ),
+                append: false,
+                lastChunk: false,
               ),
-              append: false,
-              lastChunk: false,
             ),
-          ),
-          (
-            workingTask,
-            A2aTaskArtifactUpdateEvent(
-              taskId: 'task_1',
-              artifact: A2aArtifact(
-                artifactId: 'art_1',
-                parts: <A2aPart>[A2aPart.text('world!')],
+            (
+              workingTask,
+              A2aTaskArtifactUpdateEvent(
+                taskId: 'task_1',
+                artifact: A2aArtifact(
+                  artifactId: 'art_1',
+                  parts: <A2aPart>[A2aPart.text('world!')],
+                ),
+                append: true,
+                lastChunk: false,
               ),
-              append: true,
-              lastChunk: false,
             ),
-          ),
-          (
-            completedTask,
-            A2aTaskStatusUpdateEvent(
-              taskId: 'task_1',
-              status: A2aTaskStatus(state: A2aTaskState.completed),
-              finalEvent: true,
-            ),
-          ),
-        ]);
-
-        final RemoteA2aAgent agent = RemoteA2aAgent(
-          name: 'remote_agent',
-          agentCard: makeCard(),
-          a2aClientFactory: _FakeA2aClientFactory(client),
-        );
-        final InvocationContext ctx = _newCtx(
-          agent,
-          userContent: Content.userText('say hi'),
-        );
-
-        final List<Event> events = await agent.runAsync(ctx).toList();
-        final List<Event> partials = events
-            .where((Event e) => e.partial == true)
-            .toList();
-        final List<Event> finals = events
-            .where((Event e) => e.partial != true)
-            .toList();
-
-        expect(partials, hasLength(2));
-        expect(partials[0].content?.parts.single.text, 'Hello ');
-        expect(partials[1].content?.parts.single.text, 'world!');
-        expect(finals, hasLength(1));
-        expect(finals.single.partial, isFalse);
-        expect(finals.single.content?.parts.single.text, 'Hello world!');
-      },
-    );
-
-    test(
-      'flushes open streamed buffer when stream closes on completed task without boundary event',
-      () async {
-        final A2aTask completedTask = A2aTask(
-          id: 'task_2',
-          contextId: 'ctx_2',
-          status: A2aTaskStatus(state: A2aTaskState.completed),
-        );
-
-        final _FakeA2aClient client = _FakeA2aClient(<Object>[
-          (
-            completedTask,
-            A2aTaskArtifactUpdateEvent(
-              taskId: 'task_2',
-              artifact: A2aArtifact(
-                artifactId: 'art_2',
-                parts: <A2aPart>[A2aPart.text('Part A ')],
+            (
+              completedTask,
+              A2aTaskStatusUpdateEvent(
+                taskId: 'task_1',
+                status: A2aTaskStatus(state: A2aTaskState.completed),
+                finalEvent: true,
               ),
-              append: false,
-              lastChunk: false,
             ),
-          ),
-          (
-            completedTask,
-            A2aTaskArtifactUpdateEvent(
-              taskId: 'task_2',
-              artifact: A2aArtifact(
-                artifactId: 'art_2',
-                parts: <A2aPart>[A2aPart.text('Part B')],
+          ]);
+
+          final RemoteA2aAgent agent = RemoteA2aAgent(
+            name: 'remote_agent',
+            agentCard: makeCard(),
+            a2aClientFactory: _FakeA2aClientFactory(client),
+          );
+          final InvocationContext ctx = _newCtx(
+            agent,
+            userContent: Content.userText('say hi'),
+          );
+
+          final List<Event> events = await agent.runAsync(ctx).toList();
+          final List<Event> partials = events
+              .where((Event e) => e.partial == true)
+              .toList();
+          final List<Event> nonPartialWithText = events
+              .where(
+                (Event e) =>
+                    e.partial != true && (e.content?.parts.isNotEmpty ?? false),
+              )
+              .toList();
+
+          expect(partials, hasLength(2));
+          expect(partials[0].content?.parts.single.text, 'Hello ');
+          expect(partials[1].content?.parts.single.text, 'world!');
+          expect(nonPartialWithText, isEmpty);
+        },
+      );
+
+      test(
+        'does not flush an aggregated non-partial event on stream EOF without lastChunk',
+        () async {
+          final A2aTask completedTask = A2aTask(
+            id: 'task_2',
+            contextId: 'ctx_2',
+            status: A2aTaskStatus(state: A2aTaskState.completed),
+          );
+
+          final _FakeA2aClient client = _FakeA2aClient(<Object>[
+            (
+              completedTask,
+              A2aTaskArtifactUpdateEvent(
+                taskId: 'task_2',
+                artifact: A2aArtifact(
+                  artifactId: 'art_2',
+                  parts: <A2aPart>[A2aPart.text('Part A ')],
+                ),
+                append: false,
+                lastChunk: false,
               ),
-              append: true,
-              lastChunk: false,
             ),
-          ),
-        ]);
-
-        final RemoteA2aAgent agent = RemoteA2aAgent(
-          name: 'remote_agent',
-          agentCard: makeCard(),
-          a2aClientFactory: _FakeA2aClientFactory(client),
-        );
-        final InvocationContext ctx = _newCtx(
-          agent,
-          userContent: Content.userText('go'),
-        );
-
-        final List<Event> events = await agent.runAsync(ctx).toList();
-        final List<Event> finals = events
-            .where((Event e) => e.partial != true)
-            .toList();
-
-        expect(finals, hasLength(1));
-        expect(finals.single.content?.parts.single.text, 'Part A Part B');
-      },
-    );
-
-    test(
-      'handles delta closing chunk (append=true, lastChunk=true) and empty closing marker',
-      () async {
-        final A2aTask workingTask = A2aTask(
-          id: 'task_3',
-          contextId: 'ctx_3',
-          status: A2aTaskStatus(state: A2aTaskState.working),
-        );
-
-        final _FakeA2aClient client = _FakeA2aClient(<Object>[
-          (
-            workingTask,
-            A2aTaskArtifactUpdateEvent(
-              taskId: 'task_3',
-              artifact: A2aArtifact(
-                artifactId: 'delta_art',
-                parts: <A2aPart>[A2aPart.text('One ')],
+            (
+              completedTask,
+              A2aTaskArtifactUpdateEvent(
+                taskId: 'task_2',
+                artifact: A2aArtifact(
+                  artifactId: 'art_2',
+                  parts: <A2aPart>[A2aPart.text('Part B')],
+                ),
+                append: true,
+                lastChunk: false,
               ),
-              append: false,
-              lastChunk: false,
             ),
-          ),
-          (
-            workingTask,
-            A2aTaskArtifactUpdateEvent(
-              taskId: 'task_3',
-              artifact: A2aArtifact(
-                artifactId: 'delta_art',
-                parts: <A2aPart>[A2aPart.text('Two')],
-              ),
-              append: true,
-              lastChunk: true,
-            ),
-          ),
-          (
-            workingTask,
-            A2aTaskArtifactUpdateEvent(
-              taskId: 'task_3',
-              artifact: A2aArtifact(
-                artifactId: 'marker_art',
-                parts: <A2aPart>[A2aPart.text('Marker body')],
-              ),
-              append: false,
-              lastChunk: false,
-            ),
-          ),
-          (
-            workingTask,
-            A2aTaskArtifactUpdateEvent(
-              taskId: 'task_3',
-              artifact: A2aArtifact(
-                artifactId: 'marker_art',
-                parts: <A2aPart>[],
-              ),
-              append: true,
-              lastChunk: true,
-            ),
-          ),
-          (
-            A2aTask(
-              id: 'task_3',
-              contextId: 'ctx_3',
-              status: A2aTaskStatus(state: A2aTaskState.completed),
-            ),
-            A2aTaskStatusUpdateEvent(
-              taskId: 'task_3',
-              status: A2aTaskStatus(state: A2aTaskState.completed),
-              finalEvent: true,
-            ),
-          ),
-        ]);
+          ]);
 
-        final RemoteA2aAgent agent = RemoteA2aAgent(
-          name: 'remote_agent',
-          agentCard: makeCard(),
-          a2aClientFactory: _FakeA2aClientFactory(client),
-        );
-        final InvocationContext ctx = _newCtx(
-          agent,
-          userContent: Content.userText('stream'),
-        );
+          final RemoteA2aAgent agent = RemoteA2aAgent(
+            name: 'remote_agent',
+            agentCard: makeCard(),
+            a2aClientFactory: _FakeA2aClientFactory(client),
+          );
+          final InvocationContext ctx = _newCtx(
+            agent,
+            userContent: Content.userText('go'),
+          );
 
-        final List<Event> events = await agent.runAsync(ctx).toList();
-        final List<Event> nonPartialWithText = events
-            .where(
-              (Event e) =>
-                  e.partial != true && (e.content?.parts.isNotEmpty ?? false),
-            )
-            .toList();
+          final List<Event> events = await agent.runAsync(ctx).toList();
+          expect(events, hasLength(2));
+          expect(events.every((Event e) => e.partial == true), isTrue);
+        },
+      );
 
-        expect(nonPartialWithText, hasLength(2));
-        expect(nonPartialWithText[0].content?.parts.single.text, 'One Two');
-        expect(nonPartialWithText[1].content?.parts.single.text, 'Marker body');
-      },
-    );
-  });
+      test(
+        'emits non-partial event only for chunks explicitly marked lastChunk=true',
+        () async {
+          final A2aTask workingTask = A2aTask(
+            id: 'task_3',
+            contextId: 'ctx_3',
+            status: A2aTaskStatus(state: A2aTaskState.working),
+          );
+
+          final _FakeA2aClient client = _FakeA2aClient(<Object>[
+            (
+              workingTask,
+              A2aTaskArtifactUpdateEvent(
+                taskId: 'task_3',
+                artifact: A2aArtifact(
+                  artifactId: 'delta_art',
+                  parts: <A2aPart>[A2aPart.text('One ')],
+                ),
+                append: false,
+                lastChunk: false,
+              ),
+            ),
+            (
+              workingTask,
+              A2aTaskArtifactUpdateEvent(
+                taskId: 'task_3',
+                artifact: A2aArtifact(
+                  artifactId: 'delta_art',
+                  parts: <A2aPart>[A2aPart.text('Two')],
+                ),
+                append: true,
+                lastChunk: true,
+              ),
+            ),
+            (
+              A2aTask(
+                id: 'task_3',
+                contextId: 'ctx_3',
+                status: A2aTaskStatus(state: A2aTaskState.completed),
+              ),
+              A2aTaskStatusUpdateEvent(
+                taskId: 'task_3',
+                status: A2aTaskStatus(state: A2aTaskState.completed),
+                finalEvent: true,
+              ),
+            ),
+          ]);
+
+          final RemoteA2aAgent agent = RemoteA2aAgent(
+            name: 'remote_agent',
+            agentCard: makeCard(),
+            a2aClientFactory: _FakeA2aClientFactory(client),
+          );
+          final InvocationContext ctx = _newCtx(
+            agent,
+            userContent: Content.userText('stream'),
+          );
+
+          final List<Event> events = await agent.runAsync(ctx).toList();
+          final List<Event> partials = events
+              .where((Event e) => e.partial == true)
+              .toList();
+          final List<Event> nonPartialWithText = events
+              .where(
+                (Event e) =>
+                    e.partial != true && (e.content?.parts.isNotEmpty ?? false),
+              )
+              .toList();
+
+          expect(partials, hasLength(1));
+          expect(partials.single.content?.parts.single.text, 'One ');
+          expect(nonPartialWithText, hasLength(1));
+          expect(nonPartialWithText.single.content?.parts.single.text, 'Two');
+        },
+      );
+    },
+  );
 
   group(
     '6. Sessions: appendEvents, BufferedSessionService, out-of-order getSession',
