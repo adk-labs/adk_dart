@@ -1,3 +1,12 @@
+## 2026.11.20+1
+
+- **Upstream `adk-python` Parity (`fb08c7842..c81876a49`)**:
+  - **Telemetry (`ecc6b6e01`)**: Added `gen_ai.response.model` (`genAiResponseModel`) attribute to LLM call, generate-content, and inference spans, resolved from `llmResponse.modelVersion` with fallback to `llmRequest.model`.
+  - **Models / Apigee (`7b07e7df7`)**: Added `reportMalformedFunctionCalls` (`lib/src/models/malformed_function_calls.dart`) and wired non-streaming and streaming SSE tool-call argument validation in `ApigeeLlm` to surface malformed function call JSON errors clearly.
+  - **A2A (`5523aa733`)**: Reverted streamed artifact `lastChunk` buffering in `RemoteA2aAgent` to match upstream `adk-python`.
+  - **Workflow (`f04b5fe42`, `c81876a49`)**: Implemented in-place child retries on `Workflow` (`Workflow.retryConfig` propagation via constructor/`copyWith`/`clone`, `WorkflowContext.attemptCount`, keeping `NodeStatus.running` during retry attempts, non-multiplying nested workflow failures, detached dynamic child handling, and flushing checkpoints/completed outputs before rethrowing).
+  - Verified `adk-web` remains aligned with `v1.0.8` (`4b7d11542`, `main-PJ4DBNMP.js`).
+
 ## 2026.11.20
 
 - **Nov 19 Parity Follow-up Fixes**:

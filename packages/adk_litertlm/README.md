@@ -22,7 +22,7 @@ Or add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  adk_litertlm: ^2026.11.20
+  adk_litertlm: ^2026.11.20+1
 ```
 
 ## Getting Started
