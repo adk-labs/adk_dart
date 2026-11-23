@@ -2,7 +2,7 @@
 library;
 
 /// Semantic version string for this package release.
-const String adkVersion = '2.14.1';
+const String adkVersion = '2.15.0';
 
 /// The current release version of the `adk_dart` package.
-const String adkPackageVersion = '2026.11.20+1';
+const String adkPackageVersion = '2026.11.23';

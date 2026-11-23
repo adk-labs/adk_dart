@@ -14,7 +14,7 @@ ADK Dart 是一个开源的代码优先（Code-First）Dart 工程框架，用�
 
 ## 最新更新
 
-- **ADK Python `2.14.1` 与 `adk-web` 完整对齐**：
+- **ADK Python `2.15.0` 与 `adk-web` 完整对齐**：
   - **运行时与模型**：新增用于官方 Gemini wire-format 序列化的 `LlmRequest.toGenerateContentBody()`、`Event.acceptConvenienceKwargs`、`LlmAgent.rejectMisplacedGenerateContentKwargs` 校验守卫、`AuthHandler.getAuthResponseAsync` 异步清理及 `FileArtifactService` 换行符保留。
   - **工具、MCP 与工作流**：新增 `BaseTool.displayTitle`（通过 `adk:tool_display_names` 元数据暴露）、`FunctionTool` 枚举确认 wire 值保留、MCP 服务端终止时自动重建会话，以及 `ReplayManager` `waitForOutput` 恢复守卫。
   - **评估与 Dev UI**：新增多轮评估指标 `pass@k`（`>= 1` 通过）与 `pass^k`（全部 `k` 通过）、`adk generate_agent_card` CLI 命令，以及 Web UI 中的 UTF-8 `data:` URL 解码。
@@ -36,7 +36,7 @@ ADK Dart 是一个开源的代码优先（Code-First）Dart 工程框架，用�
 
 ## ADK Python 兼容性现状
 
-ADK Dart 旨在表现与 `adk-python` 一致的行为，同时遵循 Dart 原生静态类型系统、异步流（`Stream<Event>`）、包结构及平台约束。当前发布基线追踪 `adk-python` `2.14.1`。
+ADK Dart 旨在表现与 `adk-python` 一致的行为，同时遵循 Dart 原生静态类型系统、异步流（`Stream<Event>`）、包结构及平台约束。当前发布基线追踪 `adk-python` `2.15.0`。
 
 状态图例：
 
@@ -46,7 +46,7 @@ ADK Dart 旨在表现与 `adk-python` 一致的行为，同时遵循 Dart 原生
 
 | `adk-python` 领域 | Dart 状态 | Dart 实现 API 与接口层 | 说明 |
 | --- | --- | --- | --- |
-| 包/版本基线 | ✅ | `adkVersion`, 包版本 | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, `adk_litertlm` 均对齐至 `2026.11.20+1`；ADK 基线版本为 `2.14.1`。 |
+| 包/版本基线 | ✅ | `adkVersion`, 包版本 | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, `adk_litertlm` 均对齐至 `2026.11.23`；ADK 基线版本为 `2.15.0`。 |
 | Agent 与 Runner | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | 核心调用、实时回退、会话回滚/重退（Rewind）、会话状态、回调及 Agent Transfer 均已移植。 |
 | LLM 流程处理器 | ✅ | `flows/llm_flows` 下的请求/响应处理器 | 涵盖指令、身份、内容、Token 压缩、上下文缓存、代码执行、输出结构模式、工具确认（HITL）及 Agent 转移。 |
 | 工作流运行时 | ✅ | `Workflow`, `BaseNode`, 函数/工具/LLM 节点, `NodeTool`, 合并, 路由, 动态节点, 回放 | 重试、超时、输入请求/HITL、并行工作器、工作流回放与状态恢复 (State Restoration)、图序列化及 DOT 可视化均已实现。 |
@@ -107,9 +107,9 @@ dart pub add adk_dart
 
 ```yaml
 dependencies:
-  adk_dart: ^2026.11.20+1
+  adk_dart: ^2026.11.23
   # 或使用统一 CLI 门面包：
-  # adk: ^2026.11.20+1
+  # adk: ^2026.11.23
 ```
 
 若需使用短别名门面包：

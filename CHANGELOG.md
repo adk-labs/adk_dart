@@ -1,3 +1,12 @@
+## 2026.11.23
+
+- **Upstream `adk-python` `2.15.0` Parity (`c81876a49..4d9e2c75f`)**:
+  - Updated `adkVersion` to `'2.15.0'` (`e636d5889`) and `adkPackageVersion` to `'2026.11.23'`.
+  - **Discovery Engine (`9efe12527`)**: Added `GroundingPlugin` (`lib/src/integrations/discovery_engine/plugin.dart`), `Fact`, `GroundingClient` interface, `GroundingLimits.maxFactChars`, and `GroundingResult.copyWith` for post-model grounding verification with fact deduplication, hierarchical chunking, UTF-8 byte-offset segment rebasing, fail-open error handling, and `onResult` callbacks.
+  - **Artifacts / Fsspec (`481e1b2f1`, `4d9e2c75f`)**: Added `AzureBackendAdapter` (`abfs://`, `abfss://`, `az://`) with custom metadata support, `adlfs` version gating, container-scoped prefix listing, and `BlobAlreadyExists`/`ConditionNotMet` conflict mapping; tightened `S3BackendAdapter` metadata key/value validation (RFC 9110 HTTP token keys, printable ASCII values without edge spaces, percent-encoding, and default `application/octet-stream` content type).
+  - **LangChain (`f578fcd2d`)**: Updated `LangchainTool` and `LangchainTool.fromConfig` to treat empty `name`/`description` strings as omitted and preserve the wrapped tool's metadata.
+  - Verified `adk-web` remains aligned with `v1.0.8` (`4b7d11542`, `main-PJ4DBNMP.js`).
+
 ## 2026.11.20+1
 
 - **Upstream `adk-python` Parity (`fb08c7842..c81876a49`)**:
