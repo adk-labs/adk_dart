@@ -13,6 +13,10 @@ typedef LangchainToolResolver = Function Function(String toolPath);
 typedef LangchainSchemaResolver =
     Map<String, dynamic>? Function(Function toolRunner);
 
+/// Resolves an optional metadata string (name or description) for a LangChain
+/// tool runner.
+typedef LangchainMetadataResolver = String? Function(Function toolRunner);
+
 /// Configuration model for [LangchainTool].
 class LangchainToolConfig extends BaseToolConfig {
   /// Creates a LangChain tool configuration.
@@ -36,17 +40,33 @@ class LangchainToolConfig extends BaseToolConfig {
 /// Adapter that exposes LangChain tools through ADK [FunctionTool].
 class LangchainTool extends FunctionTool {
   /// Creates a LangChain tool adapter.
+  ///
+  /// Empty [name] or [description] strings are treated as omitted and fall back
+  /// to [toolName] / [toolDescription] (or the default `'langchain_tool'` /
+  /// `''`).
   LangchainTool({
     required Function toolRunner,
     String? name,
     String? description,
+    String? toolName,
+    String? toolDescription,
     Map<String, dynamic>? parametersJsonSchema,
   }) : _parametersJsonSchema = parametersJsonSchema,
        super(
          func: toolRunner,
-         name: name ?? 'langchain_tool',
-         description: description ?? '',
+         name: _firstNonEmpty(name, toolName) ?? 'langchain_tool',
+         description: _firstNonEmpty(description, toolDescription) ?? '',
        );
+
+  static String? _firstNonEmpty(String? primary, String? fallback) {
+    if (primary != null && primary.isNotEmpty) {
+      return primary;
+    }
+    if (fallback != null && fallback.isNotEmpty) {
+      return fallback;
+    }
+    return null;
+  }
 
   final Map<String, dynamic>? _parametersJsonSchema;
 
@@ -80,6 +100,8 @@ class LangchainTool extends FunctionTool {
     ToolArgsConfig config, {
     required LangchainToolResolver resolveTool,
     LangchainSchemaResolver? resolveSchema,
+    LangchainMetadataResolver? resolveName,
+    LangchainMetadataResolver? resolveDescription,
   }) {
     final String? toolPath = config['tool'] as String?;
     if (toolPath == null || toolPath.isEmpty) {
@@ -94,6 +116,8 @@ class LangchainTool extends FunctionTool {
       toolRunner: runner,
       name: (name?.isNotEmpty ?? false) ? name : null,
       description: (description?.isNotEmpty ?? false) ? description : null,
+      toolName: resolveName?.call(runner),
+      toolDescription: resolveDescription?.call(runner),
       parametersJsonSchema: resolveSchema?.call(runner),
     );
   }

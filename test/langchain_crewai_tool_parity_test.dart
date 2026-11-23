@@ -84,6 +84,77 @@ void main() {
       );
       expect(result, 'resolved:dart');
     });
+
+    test('treats empty name and description as omitted and keeps tool metadata', () {
+      final LangchainTool tool = LangchainTool(
+        toolRunner: ({required int a, required int b}) => a + b,
+        name: '',
+        description: '',
+        toolName: 'sync_add_with_annotation',
+        toolDescription: 'Adds two numbers',
+      );
+
+      expect(tool.name, 'sync_add_with_annotation');
+      expect(tool.description, 'Adds two numbers');
+    });
+
+    test('fromConfig keeps the tool name and description when omitted or empty', () {
+      final ToolArgsConfig config = ToolArgsConfig(
+        values: <String, Object?>{
+          'tool': 'pkg.tools.sync_add_with_annotation',
+          'name': '',
+          'description': '',
+        },
+      );
+
+      final LangchainTool tool = LangchainTool.fromConfig(
+        config,
+        resolveTool: (_) => ({required int a, required int b}) => a + b,
+        resolveName: (_) => 'sync_add_with_annotation',
+        resolveDescription: (_) => 'Adds two numbers',
+      );
+
+      expect(tool.name, 'sync_add_with_annotation');
+      expect(tool.description, 'Adds two numbers');
+    });
+
+    test('fromConfig overrides only the name it sets', () {
+      final ToolArgsConfig config = ToolArgsConfig(
+        values: <String, Object?>{
+          'tool': 'pkg.tools.sync_add_with_annotation',
+          'name': 'adder',
+        },
+      );
+
+      final LangchainTool tool = LangchainTool.fromConfig(
+        config,
+        resolveTool: (_) => ({required int a, required int b}) => a + b,
+        resolveName: (_) => 'sync_add_with_annotation',
+        resolveDescription: (_) => 'Adds two numbers',
+      );
+
+      expect(tool.name, 'adder');
+      expect(tool.description, 'Adds two numbers');
+    });
+
+    test('fromConfig overrides only the description it sets', () {
+      final ToolArgsConfig config = ToolArgsConfig(
+        values: <String, Object?>{
+          'tool': 'pkg.tools.sync_add_with_annotation',
+          'description': 'Adds',
+        },
+      );
+
+      final LangchainTool tool = LangchainTool.fromConfig(
+        config,
+        resolveTool: (_) => ({required int a, required int b}) => a + b,
+        resolveName: (_) => 'sync_add_with_annotation',
+        resolveDescription: (_) => 'Adds two numbers',
+      );
+
+      expect(tool.name, 'sync_add_with_annotation');
+      expect(tool.description, 'Adds');
+    });
   });
 
   group('CrewaiTool parity', () {
