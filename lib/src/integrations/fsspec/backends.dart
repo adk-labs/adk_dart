@@ -9,6 +9,12 @@ const String _defaultMimeType = 'application/octet-stream';
 const Set<String> _gcsProtocols = <String>{'gs', 'gcs'};
 const Set<String> _localProtocols = <String>{'file', 'local'};
 const Set<String> _s3Protocols = <String>{'s3', 's3a'};
+const Set<String> _azureProtocols = <String>{'abfs', 'abfss', 'az'};
+// Azure error codes that mean an exclusive create found an existing blob.
+const Set<String> _azureConflictErrorCodes = <String>{
+  'BlobAlreadyExists',
+  'ConditionNotMet',
+};
 const Set<String> _rapidPreconditionErrorNames = <String>{
   'FailedPrecondition',
   'PreconditionFailed',
@@ -53,6 +59,33 @@ final Map<String, String> _s3InternalMetadataKeys = <String, String>{
     key.toLowerCase().replaceAll('_', '-'): key,
 };
 
+/// Azure ignores case in metadata keys. Maps ADK's keys, lowercased, back.
+final Map<String, String> _azureInternalMetadataKeys = <String, String>{
+  for (final String key in internalMetadataKeys) key.toLowerCase(): key,
+};
+
+/// Metadata keys `adlfs` uses to tell files from directories.
+const Set<String> _adlfsDirectoryMetadataKeys = <String>{
+  'is_directory',
+  'hdi_isfolder',
+};
+
+/// Lowercased keys caller metadata may not use on Azure, mapped to their owner.
+final Map<String, String> _azureReservedMetadataKeys = <String, String>{
+  for (final String key in _adlfsDirectoryMetadataKeys) key: key,
+  ..._azureInternalMetadataKeys,
+};
+
+/// Azure metadata keys must be C# identifiers.
+final RegExp _azureMetadataKeyPattern = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
+
+/// S3 metadata keys are HTTP header names (RFC 9110 tokens).
+final RegExp _httpTokenPattern = RegExp(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$");
+
+/// Metadata values the stores keep as given: printable ASCII without spaces at
+/// either end, which stores and clients trim from header values.
+final RegExp _metadataValuePattern = RegExp(r'^(?:[!-~](?:[ -~]*[!-~])?)?$');
+
 /// Exception representing an S3 HTTP 409 `ConditionalRequestConflict` error.
 class S3ConditionalRequestConflictException extends FileSystemException {
   /// Creates an [S3ConditionalRequestConflictException] for [path].
@@ -60,6 +93,55 @@ class S3ConditionalRequestConflictException extends FileSystemException {
     String path, [
     String message = 'ConditionalRequestConflict',
   ]) : super(message, path);
+}
+
+/// Exception carrying an Azure Storage error code (for example
+/// `'BlobAlreadyExists'` or `'ConditionNotMet'`).
+class AzureStorageException implements Exception {
+  /// Creates an [AzureStorageException].
+  const AzureStorageException(
+    this.errorCode, [
+    this.message = 'Azure storage error',
+    this.cause,
+  ]);
+
+  /// Azure error code (e.g. `'BlobAlreadyExists'`, `'ConditionNotMet'`).
+  final String errorCode;
+
+  /// Human-readable error message.
+  final String message;
+
+  /// Optional underlying cause.
+  final Object? cause;
+
+  @override
+  String toString() => 'AzureStorageException($errorCode): $message';
+}
+
+/// Exception wrapping an underlying Azure error (mirroring Python's
+/// `RuntimeError(...) from cause` raised by `adlfs`).
+class AzureRuntimeException implements Exception {
+  /// Creates an [AzureRuntimeException].
+  const AzureRuntimeException(this.message, {this.cause});
+
+  /// Human-readable error message.
+  final String message;
+
+  /// Optional underlying cause (such as an [AzureStorageException]).
+  final Object? cause;
+
+  @override
+  String toString() => 'AzureRuntimeException: $message';
+}
+
+/// Exception thrown when an fsspec backend library version is too old or
+/// missing required support (mirrors Python's `ImportError`).
+class FsspecImportError extends UnsupportedError {
+  /// Creates an [FsspecImportError] with [message].
+  FsspecImportError(super.message);
+
+  @override
+  String toString() => 'ImportError: $message';
 }
 
 /// Returns only caller-supplied metadata keys, hiding ADK internal markers.
@@ -94,6 +176,7 @@ double _parseAdapterTimestamp(
   const List<String> fields = <String>[
     'timeCreated',
     'created',
+    'creation_time',
     'mtime',
     'LastModified',
     'updated',
@@ -143,21 +226,13 @@ bool _isAdapterMissingError(Object error) {
   return false;
 }
 
-bool _isAscii(String value) {
-  for (int i = 0; i < value.length; i += 1) {
-    if (value.codeUnitAt(i) > 0x7F) {
-      return false;
-    }
-  }
-  return true;
-}
-
-/// Percent-encodes [value] for S3 metadata, leaving printable ASCII (`0x20..0x7E`)
-/// except `%` untouched, matching Python's `urllib.parse.quote(value, safe=...)`.
-String _s3EncodeMetadataValue(String value) {
+/// Percent-encodes [value] for ASCII-only metadata stores (S3, Azure), leaving
+/// printable ASCII (`0x21..0x7E`) except `%` untouched. Spaces (`0x20`) are
+/// percent-encoded because stores trim them from header values.
+String _encodeAsciiMetadataValue(String value) {
   final StringBuffer buffer = StringBuffer();
   for (final int rune in value.runes) {
-    if (rune >= 0x20 && rune <= 0x7E && rune != 0x25) {
+    if (rune >= 0x21 && rune <= 0x7E && rune != 0x25) {
       buffer.writeCharCode(rune);
     } else {
       final String encoded = Uri.encodeComponent(String.fromCharCode(rune));
@@ -165,6 +240,72 @@ String _s3EncodeMetadataValue(String value) {
     }
   }
   return buffer.toString();
+}
+
+/// Returns [metadata] encoded and validated for stores that only keep ASCII
+/// metadata (S3, Azure).
+///
+/// ADK's own values, such as display names and file URIs, are percent-encoded
+/// so they round-trip. Caller metadata that the store would reject or change is
+/// rejected with [FsspecInputValidationError].
+Map<String, String> _encodeAsciiMetadata(
+  Map<String, String> metadata, {
+  required String store,
+  required String keyRule,
+  required bool Function(String key) isValidKey,
+  required String Function(String key) storeKey,
+  required Map<String, String> reserved,
+}) {
+  final Map<String, String> encoded = <String, String>{};
+  // Store-form keys of caller metadata seen so far, mapped to the caller key.
+  final Map<String, String> seen = <String, String>{};
+  for (final MapEntry<String, String> entry in metadata.entries) {
+    final String key = entry.key;
+    final String value = entry.value;
+    if (internalMetadataKeys.contains(key)) {
+      encoded[key] = _encodeAsciiMetadataValue(value);
+      continue;
+    }
+    if (!isValidKey(key) || !_metadataValuePattern.hasMatch(value)) {
+      throw FsspecInputValidationError(
+        'custom_metadata on $store needs $keyRule keys and printable ASCII '
+        "values without spaces at either end, got '$key': '$value'.",
+      );
+    }
+    final String storedAs = storeKey(key);
+    final String? owner = reserved[storedAs] ?? seen[storedAs];
+    if (owner != null) {
+      throw FsspecInputValidationError(
+        "custom_metadata key '$key' is stored on $store as the same key as "
+        "'$owner'.",
+      );
+    }
+    seen[storedAs] = key;
+    encoded[key] = value;
+  }
+  return encoded;
+}
+
+bool _isAdlfsVersionOlderThan2026_8_0(String? version) {
+  if (version == null || version.isEmpty) {
+    return false;
+  }
+  final RegExpMatch? match = RegExp(
+    r'^(\d+)\.(\d+)(?:\.(\d+))?(?:[a-zA-Z0-9.+_-]*)?$',
+  ).firstMatch(version.trim());
+  if (match == null) {
+    return false;
+  }
+  final int major = int.parse(match.group(1)!);
+  final int minor = int.parse(match.group(2)!);
+  final int patch = match.group(3) != null ? int.parse(match.group(3)!) : 0;
+  if (major != 2026) {
+    return major < 2026;
+  }
+  if (minor != 8) {
+    return minor < 8;
+  }
+  return patch < 0;
 }
 
 /// Normalized storage metadata for a single stored artifact version.
@@ -244,6 +385,9 @@ abstract class FsspecBackendAdapter {
     if (protocols.intersection(_s3Protocols).isNotEmpty) {
       return S3BackendAdapter(fs, clock: clock);
     }
+    if (protocols.intersection(_azureProtocols).isNotEmpty) {
+      return AzureBackendAdapter(fs, clock: clock);
+    }
     return GenericBackendAdapter(fs, clock: clock);
   }
 
@@ -283,6 +427,11 @@ abstract class FsspecBackendAdapter {
       contentType: contentType,
       createTime: _parseAdapterTimestamp(info, clock: _clock),
     );
+  }
+
+  /// Returns `find(detail: true)` entries for objects under [prefix].
+  Object findDetail(String prefix) {
+    return fs.find(prefix, detail: true);
   }
 
   /// Normalizes `find(detail: true)` entries, keyed by object path.
@@ -406,8 +555,11 @@ class GcsBackendAdapter extends FsspecBackendAdapter {
 /// Reads and writes object metadata on Amazon S3 (`s3fs`).
 ///
 /// S3 metadata keys are lowercased with `_` converted to `-`, and values must
-/// be ASCII. ADK's own metadata keys are mapped back on read and their values
-/// are percent-encoded so they round-trip.
+/// be printable ASCII without spaces at either end. ADK's own metadata keys
+/// are mapped back on read and their values are percent-encoded so they
+/// round-trip. Caller keys must be HTTP header names (RFC 9110 tokens), and
+/// caller keys that would read back as ADK's own keys or as each other are
+/// rejected.
 class S3BackendAdapter extends FsspecBackendAdapter {
   /// Creates an S3 backend adapter.
   S3BackendAdapter(super.fs, {super.clock});
@@ -460,20 +612,28 @@ class S3BackendAdapter extends FsspecBackendAdapter {
     String? contentType,
     Map<String, String> metadata = const <String, String>{},
   }) {
-    final Map<String, String> encoded = <String, String>{
-      for (final MapEntry<String, String> entry in metadata.entries)
-        entry.key: internalMetadataKeys.contains(entry.key)
-            ? _s3EncodeMetadataValue(entry.value)
-            : entry.value,
-    };
-    _validateMetadata(encoded);
+    final Map<String, String>? encoded = metadata.isEmpty
+        ? null
+        : _encodeAsciiMetadata(
+            metadata,
+            store: 'S3',
+            keyRule: 'HTTP header name',
+            isValidKey: _httpTokenPattern.hasMatch,
+            storeKey: (String k) => k.toLowerCase().replaceAll('_', '-'),
+            reserved: _s3InternalMetadataKeys,
+          );
+    // S3 would default to binary/octet-stream. Match GCS and Azure.
+    final String effectiveContentType =
+        (contentType != null && contentType.isNotEmpty)
+        ? contentType
+        : _defaultMimeType;
     try {
       fs.pipeFile(
         key,
         data,
         mode: 'create',
-        contentType: contentType,
-        metadata: encoded.isEmpty ? null : encoded,
+        contentType: effectiveContentType,
+        metadata: encoded,
       );
     } on S3ConditionalRequestConflictException catch (exc) {
       throw FsspecFileExistsException(key, cause: exc);
@@ -484,51 +644,156 @@ class S3BackendAdapter extends FsspecBackendAdapter {
       rethrow;
     }
   }
+}
 
-  static void _validateMetadata(Map<String, String> metadata) {
-    for (final MapEntry<String, String> entry in metadata.entries) {
-      if (!_isAscii(entry.key) || !_isAscii(entry.value)) {
-        throw FsspecInputValidationError(
-          "custom_metadata keys and values must be ASCII on S3, got "
-          "'${entry.key}': '${entry.value}'.",
-        );
+/// Reads and writes object metadata on Azure Blob Storage (`adlfs`).
+///
+/// `adlfs` returns `metadata`, `content_settings`, and `creation_time` in both
+/// `info()` and listings. Its `pipe_file` cannot take metadata, so objects are
+/// created with `openWrite(key, mode: 'xb', metadata: ..., contentSettings: ...)`
+/// which commits with `If-None-Match: *`. This needs `adlfs` 2026.8.0 or newer;
+/// older versions drop `content_settings`, so saving with them is rejected.
+/// `adlfs` treats a blob with a size as a file, so its `is_directory` marker is
+/// not written and is hidden on read.
+///
+/// Azure metadata must be ASCII, and keys must be C# identifiers compared
+/// without case. ADK's own values (such as display names and file URIs) are
+/// percent-encoded so they round-trip. Caller metadata is rejected if a key is
+/// not a C# identifier, a value is not printable ASCII or has spaces at either
+/// end, or a key matches ADK's or `adlfs`'s own keys or another caller key
+/// ignoring case.
+class AzureBackendAdapter extends FsspecBackendAdapter {
+  /// Creates an Azure backend adapter.
+  AzureBackendAdapter(super.fs, {super.clock, String? adlfsVersion})
+    : _dropsContentType = _isAdlfsVersionOlderThan2026_8_0(
+        adlfsVersion ?? fs.backendVersion,
+      );
+
+  final bool _dropsContentType;
+
+  @override
+  bool get storesCustomMetadata => true;
+
+  @override
+  FsspecObjectMetadata? readMetadata(String key) {
+    // adlfs invalidateCache(key) keeps a cached parent listing, which info()
+    // would trust and report key as missing.
+    fs.invalidateCache(fs.parent(key));
+    return super.readMetadata(key);
+  }
+
+  @override
+  Object findDetail(String prefix) {
+    // adlfs find(path) returns [path] when path is itself a blob, which a flat
+    // namespace allows next to blobs below it (a/0 and a/0/0). Listing from
+    // the container with prefix= skips that check.
+    final int slash = prefix.indexOf('/');
+    final String container = slash >= 0 ? prefix.substring(0, slash) : prefix;
+    final String path = slash >= 0 ? prefix.substring(slash + 1) : '';
+    return fs.find(container, prefix: path, detail: true);
+  }
+
+  @override
+  FsspecObjectMetadata fromInfo(String key, Map<String, Object?> info) {
+    final Map<String, Object?> rawMetadata = <String, Object?>{};
+    final Object? rawMeta = info['metadata'];
+    if (rawMeta is Map) {
+      rawMeta.forEach((Object? rawName, Object? rawValue) {
+        if (rawName == null) {
+          return;
+        }
+        final String origName = '$rawName';
+        final String lower = origName.toLowerCase();
+        if (_adlfsDirectoryMetadataKeys.contains(lower)) {
+          return;
+        }
+        final String name = _azureInternalMetadataKeys[lower] ?? origName;
+        Object? value = rawValue;
+        if (internalMetadataKeys.contains(name) && value != null) {
+          value = Uri.decodeComponent('$value');
+        }
+        rawMetadata[name] = value;
+      });
+    }
+    String? contentType;
+    final Object? contentSettings = info['content_settings'];
+    if (contentSettings is Map) {
+      final Object? ct = contentSettings['content_type'];
+      if (ct is String && ct.isNotEmpty) {
+        contentType = ct;
       }
     }
-    final Map<String, String> s3Keys = <String, String>{
-      for (final String key in metadata.keys)
-        key: key.toLowerCase().replaceAll('_', '-'),
-    };
-    final List<String> reserved =
-        s3Keys.entries
-            .where(
-              (MapEntry<String, String> e) =>
-                  !internalMetadataKeys.contains(e.key) &&
-                  _s3InternalMetadataKeys.containsKey(e.value),
-            )
-            .map((MapEntry<String, String> e) => e.key)
-            .toList()
-          ..sort();
-    if (reserved.isNotEmpty) {
-      throw FsspecInputValidationError(
-        'custom_metadata keys would read back as ADK keys on S3: '
-        '${reserved.join(', ')}.',
+    return FsspecObjectMetadata(
+      rawMetadata: rawMetadata,
+      contentType: contentType,
+      createTime: _parseAdapterTimestamp(info, clock: _clock),
+    );
+  }
+
+  static bool _isAzureConflict(Object error) {
+    if (error is AzureStorageException) {
+      return _azureConflictErrorCodes.contains(error.errorCode);
+    }
+    return false;
+  }
+
+  static Object? _errorCause(Object error) {
+    if (error is AzureRuntimeException) {
+      return error.cause;
+    }
+    if (error is AzureStorageException) {
+      return error.cause;
+    }
+    if (error is FsspecFileExistsException) {
+      return error.cause;
+    }
+    return null;
+  }
+
+  @override
+  void createObject(
+    String key,
+    List<int> data, {
+    String? contentType,
+    Map<String, String> metadata = const <String, String>{},
+  }) {
+    if (_dropsContentType) {
+      throw FsspecImportError(
+        'Saving artifacts on Azure needs adlfs 2026.8.0 or newer. Upgrade it '
+        'with `pip install -U adlfs`.',
       );
     }
-    final Map<String, int> counts = <String, int>{};
-    for (final String s3Key in s3Keys.values) {
-      counts[s3Key] = (counts[s3Key] ?? 0) + 1;
-    }
-    final List<String> merged =
-        s3Keys.entries
-            .where((MapEntry<String, String> e) => (counts[e.value] ?? 0) > 1)
-            .map((MapEntry<String, String> e) => e.key)
-            .toList()
-          ..sort();
-    if (merged.isNotEmpty) {
-      throw FsspecInputValidationError(
-        'custom_metadata keys would read back as the same key on S3: '
-        '${merged.join(', ')}.',
-      );
+    final Map<String, String> encoded = _encodeAsciiMetadata(
+      metadata,
+      store: 'Azure',
+      keyRule: 'C# identifier',
+      isValidKey: _azureMetadataKeyPattern.hasMatch,
+      storeKey: (String k) => k.toLowerCase(),
+      reserved: _azureReservedMetadataKeys,
+    );
+    final Map<String, Object?>? contentSettings = contentType != null
+        ? <String, Object?>{'content_type': contentType}
+        : null;
+    final FsspecWriteStream stream = fs.openWrite(
+      key,
+      mode: 'xb',
+      metadata: encoded,
+      contentSettings: contentSettings,
+    );
+    try {
+      stream.write(data);
+      stream.close();
+    } catch (exc) {
+      // Keep finalizers from calling close() and committing a failed write.
+      stream.closed = true;
+      // adlfs maps a conflicting commit to FileExistsError. Azure errors still
+      // come through raw from its fallback upload of empty payloads, or wrapped
+      // in RuntimeError, such as a 412.
+      final Object? cause = _errorCause(exc);
+      if (_isAzureConflict(exc) || (cause != null && _isAzureConflict(cause))) {
+        throw FsspecFileExistsException(key, cause: exc);
+      }
+      rethrow;
     }
   }
 }

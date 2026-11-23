@@ -353,6 +353,8 @@ class _FakeRapidGcsStore extends InMemoryFsspecFilesystem {
     String mode = 'wb',
     int? generation,
     bool finalizeOnClose = false,
+    Map<String, String>? metadata,
+    Map<String, Object?>? contentSettings,
   }) {
     openCalls += 1;
     final String normalized = stripProtocol(path);

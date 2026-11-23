@@ -486,9 +486,29 @@ abstract class FilesystemProtocol {
   /// Whether write operations automatically create parent directories.
   bool get autoMkdir => true;
 
+  /// Optional backend library version string (for example the `adlfs` version
+  /// on Azure filesystems).
+  String? get backendVersion => null;
+
   /// Strips any URL scheme/protocol prefix from [path] and returns the
   /// filesystem-internal path.
   String stripProtocol(String path);
+
+  /// Returns the parent directory path of [path], matching `fsspec._parent`.
+  String parent(String path) {
+    final String stripped = stripProtocol(path);
+    final String trimmed = stripped.endsWith('/') && stripped.length > 1
+        ? stripped.substring(0, stripped.length - 1)
+        : stripped;
+    final int slash = trimmed.lastIndexOf('/');
+    if (slash < 0) {
+      return '';
+    }
+    if (slash == 0) {
+      return '/';
+    }
+    return trimmed.substring(0, slash);
+  }
 
   /// Prepends the canonical protocol scheme of this filesystem to [path].
   String unstripProtocol(String path) {
@@ -506,11 +526,13 @@ abstract class FilesystemProtocol {
   ///
   /// When [detail] is `true`, returns a `Map<String, Map<String, Object?>>`
   /// mapping each entry path to its metadata dictionary (or a `List<String>`).
+  /// Optional [prefix] restricts matches to entries under `[path]/[prefix]`.
   Object find(
     String path, {
     int? maxdepth,
     bool withdirs = false,
     bool detail = false,
+    String? prefix,
   });
 
   /// Returns metadata dictionary for [path].
@@ -543,6 +565,8 @@ abstract class FilesystemProtocol {
     String mode = 'wb',
     int? generation,
     bool finalizeOnClose = false,
+    Map<String, String>? metadata,
+    Map<String, Object?>? contentSettings,
   }) {
     throw UnsupportedError('openWrite is not supported by $runtimeType.');
   }
@@ -582,6 +606,8 @@ class _InMemoryWriteStream extends FsspecWriteStream {
     required this.fs,
     required this.key,
     required this.exclusive,
+    this.metadata,
+    this.contentSettings,
   }) {
     if (exclusive && fs._files.containsKey(key)) {
       closed = true;
@@ -592,6 +618,8 @@ class _InMemoryWriteStream extends FsspecWriteStream {
   final InMemoryFsspecFilesystem fs;
   final String key;
   final bool exclusive;
+  final Map<String, String>? metadata;
+  final Map<String, Object?>? contentSettings;
   final BytesBuilder _buffer = BytesBuilder(copy: false);
 
   @override
@@ -611,7 +639,14 @@ class _InMemoryWriteStream extends FsspecWriteStream {
     if (exclusive && fs._files.containsKey(key)) {
       throw FsspecFileExistsException(key);
     }
-    fs.putFile(key, _buffer.takeBytes());
+    final Map<String, Object?> extra = <String, Object?>{
+      'mtime': DateTime.now().millisecondsSinceEpoch / 1000.0,
+      if (metadata != null && metadata!.isNotEmpty)
+        'metadata': Map<String, String>.from(metadata!),
+      if (contentSettings != null && contentSettings!.isNotEmpty)
+        'content_settings': Map<String, Object?>.from(contentSettings!),
+    };
+    fs.putFile(key, _buffer.takeBytes(), info: extra);
   }
 }
 
@@ -625,6 +660,7 @@ class InMemoryFsspecFilesystem extends FilesystemProtocol {
     this.asyncImpl = false,
     this.asynchronous = false,
     this.autoMkdir = true,
+    this.backendVersion,
   });
 
   @override
@@ -641,6 +677,9 @@ class InMemoryFsspecFilesystem extends FilesystemProtocol {
 
   @override
   final bool autoMkdir;
+
+  @override
+  final String? backendVersion;
 
   /// Paths passed to [invalidateCache], recorded in call order for diagnostics
   /// and unit tests.
@@ -717,16 +756,25 @@ class InMemoryFsspecFilesystem extends FilesystemProtocol {
     int? maxdepth,
     bool withdirs = false,
     bool detail = false,
+    String? prefix,
   }) {
-    final String root = stripProtocol(path);
-    final String prefix = root.isEmpty || root == '/' ? root : '$root/';
+    final String baseRoot = stripProtocol(path);
+    final String normalizedSubPrefix = prefix == null ? '' : _normalize(prefix);
+    final String root = normalizedSubPrefix.isEmpty
+        ? baseRoot
+        : (baseRoot.isEmpty || baseRoot == '/'
+              ? (baseRoot == '/' ? '/$normalizedSubPrefix' : normalizedSubPrefix)
+              : '$baseRoot/$normalizedSubPrefix');
+    final String searchPrefix = root.isEmpty || root == '/' ? root : '$root/';
     final bool rootExistsAsFile = _files.containsKey(root);
     final List<String> matchedFiles = <String>[
       if (rootExistsAsFile) root,
       for (final String key in _files.keys)
         if (key != root &&
-            (prefix.isEmpty ||
-                (prefix == '/' ? key.startsWith('/') : key.startsWith(prefix))))
+            (searchPrefix.isEmpty ||
+                (searchPrefix == '/'
+                    ? key.startsWith('/')
+                    : key.startsWith(searchPrefix))))
           if (_withinMaxDepth(root, key, maxdepth)) key,
     ];
 
@@ -742,11 +790,11 @@ class InMemoryFsspecFilesystem extends FilesystemProtocol {
             },
       );
       if (withdirs) {
-        final String rel = prefix.isEmpty
+        final String rel = searchPrefix.isEmpty
             ? fileKey
-            : prefix == '/'
+            : searchPrefix == '/'
             ? fileKey.substring(1)
-            : fileKey.substring(prefix.length);
+            : fileKey.substring(searchPrefix.length);
         final List<String> parts = rel.split('/');
         String current = root == '/' ? '' : root;
         for (int i = 0; i < parts.length - 1; i++) {
@@ -859,12 +907,16 @@ class InMemoryFsspecFilesystem extends FilesystemProtocol {
     String mode = 'wb',
     int? generation,
     bool finalizeOnClose = false,
+    Map<String, String>? metadata,
+    Map<String, Object?>? contentSettings,
   }) {
     final String normalized = stripProtocol(path);
     return _InMemoryWriteStream(
       fs: this,
       key: normalized,
       exclusive: mode.contains('x') || generation == 0,
+      metadata: metadata,
+      contentSettings: contentSettings,
     );
   }
 
@@ -1026,8 +1078,12 @@ class LocalFsspecFilesystem extends FilesystemProtocol {
     int? maxdepth,
     bool withdirs = false,
     bool detail = false,
+    String? prefix,
   }) {
-    final String stripped = stripProtocol(path);
+    final String baseStripped = stripProtocol(path);
+    final String stripped = (prefix != null && prefix.isNotEmpty)
+        ? '$baseStripped/$prefix'
+        : baseStripped;
     final FileSystemEntityType entityType = FileSystemEntity.typeSync(
       stripped,
       followLinks: true,
@@ -1138,6 +1194,8 @@ class LocalFsspecFilesystem extends FilesystemProtocol {
     String mode = 'wb',
     int? generation,
     bool finalizeOnClose = false,
+    Map<String, String>? metadata,
+    Map<String, Object?>? contentSettings,
   }) {
     final String stripped = stripProtocol(path);
     return _LocalWriteStream(stripped, exclusive: mode.contains('x'));
@@ -1234,6 +1292,16 @@ final Map<String, InMemoryFsspecFilesystem> _sharedMemoryFilesystems =
 /// `GcsArtifactService`:
 /// - Session-scoped: `{root}/{app_name}/{user_id}/{session_id}/{filename}/{version}`
 /// - User-scoped (`user:`): `{root}/{app_name}/{user_id}/user/{filename}/{version}`
+///
+/// S3 (`s3fs`) also stores content type and custom metadata. Its
+/// `custom_metadata` keys come back lowercased with `_` turned into `-`.
+/// `custom_metadata` keys must be HTTP header names, and caller keys that S3
+/// would read back as ADK's own keys or as each other are rejected.
+///
+/// Azure (`adlfs`) also stores content type and custom metadata. Its
+/// `custom_metadata` keys must be C# identifiers that stay distinct and do not
+/// match ADK's or `adlfs`'s own keys when case is ignored. On both stores,
+/// values must be printable ASCII without spaces at either end.
 ///
 /// Gated behind [FeatureName.fsspecArtifactService] (`@experimental`).
 class FsspecArtifactService extends BaseArtifactService {
@@ -1387,7 +1455,7 @@ class FsspecArtifactService extends BaseArtifactService {
     _fs.invalidateCache(path);
     Object detail;
     try {
-      detail = _fs.find(prefix, detail: true);
+      detail = _backend.findDetail(prefix);
     } catch (error) {
       if (_isMissingError(error)) {
         return <String, Map<String, Object?>>{};
@@ -1468,8 +1536,8 @@ class FsspecArtifactService extends BaseArtifactService {
       final InlineData inline = artifact.inlineData!;
       if (blobMetadata.isNotEmpty && !_backend.storesCustomMetadata) {
         throw FsspecInputValidationError(
-          'Saving custom_metadata requires a filesystem backend that'
-          ' persists custom object metadata (such as gs:// or s3://).',
+          'Saving custom_metadata requires a filesystem backend that persists'
+          ' custom object metadata (such as gs://, s3:// or abfs://).',
         );
       }
       data = inline.data;
@@ -1481,8 +1549,8 @@ class FsspecArtifactService extends BaseArtifactService {
     } else if (artifact.text != null) {
       if (!_backend.storesCustomMetadata) {
         throw FsspecInputValidationError(
-          'Saving text artifacts requires a filesystem backend that'
-          ' persists custom object metadata (such as gs:// or s3://).',
+          'Saving text artifacts requires a filesystem backend that persists'
+          ' custom object metadata (such as gs://, s3:// or abfs://).',
         );
       }
       data = utf8.encode(artifact.text!);
@@ -1498,8 +1566,8 @@ class FsspecArtifactService extends BaseArtifactService {
       }
       if (!_backend.storesCustomMetadata) {
         throw FsspecInputValidationError(
-          'Saving file_data URI references requires a filesystem backend'
-          ' that persists custom object metadata (such as gs:// or s3://).',
+          'Saving file_data URI references requires a filesystem backend that'
+          ' persists custom object metadata (such as gs://, s3:// or abfs://).',
         );
       }
       if (_isArtifactRef(artifact)) {

@@ -3,7 +3,11 @@ library;
 
 export 'backends.dart'
     show
+        AzureBackendAdapter,
+        AzureRuntimeException,
+        AzureStorageException,
         FsspecBackendAdapter,
+        FsspecImportError,
         FsspecObjectMetadata,
         GcsBackendAdapter,
         GenericBackendAdapter,
