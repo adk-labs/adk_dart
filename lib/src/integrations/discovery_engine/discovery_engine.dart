@@ -9,5 +9,6 @@ export 'check_grounding_client.dart'
         CheckGroundingClient,
         CheckGroundingTransport,
         checkGroundingUserAgent;
+export 'plugin.dart' show GroundingClient, GroundingPlugin, OnResult;
 export 'types.dart'
-    show FactChunk, GroundingLimits, GroundingResult, GroundingStatus;
+    show Fact, FactChunk, GroundingLimits, GroundingResult, GroundingStatus;

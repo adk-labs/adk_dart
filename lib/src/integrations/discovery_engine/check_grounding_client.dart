@@ -77,7 +77,7 @@ typedef CheckGroundingAuthHeadersProvider =
 ///
 /// The API rejects answers longer than its token limit; such answers produce a
 /// [GroundingStatus.rejectedTooLong] result rather than an exception.
-class CheckGroundingClient {
+class CheckGroundingClient implements GroundingClient {
   /// Initializes the client.
   ///
   /// Resolves [projectId] from the parameter or `GOOGLE_CLOUD_PROJECT` in
@@ -151,6 +151,7 @@ class CheckGroundingClient {
   String get groundingConfig => _groundingConfig;
 
   /// Grounding capacity limits enforced by this client.
+  @override
   GroundingLimits get limits => _limits;
 
   /// Returns the REST endpoint URI for `groundingConfigs.check`.
@@ -168,6 +169,7 @@ class CheckGroundingClient {
   ///
   /// A custom [CheckGroundingTransport] passed to the constructor is left open
   /// for its owner to close.
+  @override
   Future<void> close() async {
     final HttpClient? client = _ownedHttpClient;
     _ownedHttpClient = null;
@@ -178,6 +180,7 @@ class CheckGroundingClient {
   ///
   /// Only the first `limits.maxFacts` chunks are sent. Errors returned by the
   /// API are reported through [GroundingResult.status] rather than thrown.
+  @override
   Future<GroundingResult> checkGroundingAsync({
     required String answerCandidate,
     required List<FactChunk> facts,
