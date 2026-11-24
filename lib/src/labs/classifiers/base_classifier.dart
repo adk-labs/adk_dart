@@ -55,13 +55,13 @@ abstract class BaseClassifier {
   ///
   /// Keeps the outer label instead when one is already set, such as during an
   /// evaluation run.
-  Future<T> runWithClientLabelContext<T>(FutureOr<T> Function() action) async {
+  Future<T> runWithClientLabelContext<T>(FutureOr<T> Function() action) {
     final String label = classifierClientLabel(clientLabelKind);
     Future<T> runner() async => await action();
     try {
-      return await clientLabelContext<Future<T>>(label, runner);
+      return clientLabelContext<Future<T>>(label, runner);
     } on ArgumentError {
-      return await runner();
+      return runner();
     }
   }
 
