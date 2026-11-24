@@ -5,4 +5,4 @@ library;
 const String adkVersion = '2.15.0';
 
 /// The current release version of the `adk_dart` package.
-const String adkPackageVersion = '2026.11.23';
+const String adkPackageVersion = '2026.11.24';

@@ -108,7 +108,7 @@ Or with `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  adk: ^2026.11.23
+  adk: ^2026.11.24
 ```
 
 For local repository development:

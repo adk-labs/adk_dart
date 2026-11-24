@@ -13,7 +13,7 @@ description: >-
 
 # ADK Dart Debugging & Failure Modes
 
-Checked against `adk_dart` `2026.11.23` (`adk-python` `2.15.0` baseline).
+Checked against `adk_dart` `2026.11.24` (`adk-python` `2.15.0` baseline).
 
 ## 1. Enable Structured Debug Logging (`DebugLoggingPlugin`)
 

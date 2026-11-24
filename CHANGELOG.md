@@ -1,3 +1,13 @@
+## 2026.11.24
+
+- **Upstream `adk-python` Parity (`4d9e2c75f..54fc37e5f`)**:
+  - Updated `adkPackageVersion` to `'2026.11.24'` (`adkVersion = '2.15.0'`).
+  - **Skills (`6686413c2`)**: Added `loadSkillFromMarkdown` across both VM (`lib/src/skills/skill.dart`) and Web (`lib/src/skills/skill_web.dart`) to build a `Skill` directly from `SKILL.md` text and optional `Resources`.
+  - **Classifiers (`b4ae4fb8d`)**: Added `GeminiDecisionsClassifier` (`lib/src/labs/classifiers/gemini_decisions_classifier.dart`) targeting `POST /v1beta/decisions` (`gemini-decision-1`) with `Choice`, `Binary` (`noul`), and `Score` questions, multimodal inputs, refusal handling, and injectable HTTP client support.
+  - **Telemetry (`8c0d2f880`)**: Added `lib/src/telemetry/_genai_instrumentor.dart` and updated `tracing.dart` / `metrics.dart` so Gemini inferences are recorded once when `opentelemetry-instrumentation-google-genai` is installed, gating semconv inference token metrics on `opentelemetry-util-genai <= 1.3b0`.
+  - **Models, Flows, Live & Plugins (`9c22a89fe`, `17c4a10af`)**: Tracked transient user instruction contents on `LlmRequest` (`isTransientUserContent`, `lastNonTransientContent`, `copyRequestScopedFields`), gated dynamic instruction content routing via `supportsDynamicInstructionRouting` across `BaseLlm`/`GoogleLlm`/`AnthropicLlm`/`LiteLlm`/`FallbackModel`/`CascadeLive` and live/CFC sessions, updated `ContextFilterPlugin`, `MultimodalToolResultsPlugin`, and `ModelArmorPlugin` to skip transient instructions, and copied request-scoped config/tools when screening live user input.
+  - Verified `adk-web` remains aligned with `v1.0.8` (`4b7d11542`, `main-PJ4DBNMP.js`).
+
 ## 2026.11.23
 
 - **Upstream `adk-python` `2.15.0` Parity (`c81876a49..4d9e2c75f`)**:

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.11.24
+
+- Bumped package version to `2026.11.24` and dependency `adk_dart: ^2026.11.24`.
+- **CLI Deploy (`84cb0742b`)**: Warn on duplicate Agent Engine `display_name` with matching runtime IDs/timestamps and `--agent_engine_id=<ID>` guidance, and added `--update_if_exists` / `--update-if-exists` (mutually exclusive with `--agent_engine_id`, updating single match in place, failing on 2+ matches or Express Mode, and preserving pre-existing runtimes on update failure).
+- Bundled ADK Web remains aligned with `v1.0.8` (`4b7d11542`, `main-PJ4DBNMP.js`).
+
 ## 2026.11.23
 
 - Bumped package version to `2026.11.23` and dependency `adk_dart: ^2026.11.23`.
