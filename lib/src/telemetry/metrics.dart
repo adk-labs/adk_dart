@@ -9,6 +9,7 @@ import '../models/llm_request.dart';
 import '../models/llm_response.dart';
 import '../types/content.dart';
 import '../utils/system_environment/system_environment.dart';
+import '_genai_instrumentor.dart';
 
 /// Metric name for client token usage.
 const String genAiClientTokenUsageMetric = 'gen_ai.client.token.usage';
@@ -1067,11 +1068,13 @@ double getElapsedSeconds({
 /// token metrics for [model].
 ///
 /// Emitted in every ADK telemetry schema version (`1` and `2`), except when an
-/// active `opentelemetry-instrumentation-google-genai` version (`> 0.7b2`)
-/// already records them for a Gemini model.
+/// active `opentelemetry-util-genai` version (`> 1.3b0`) already records them
+/// for a Gemini model. When `opentelemetry-util-genai` is not installed or its
+/// version is unknown, ADK emits the metrics.
 bool shouldEmitSemconvInferenceTokenMetrics(
   String? model, {
   required bool hasGenAiInstrumentor,
+  String? utilGenAiVersion,
   String? instrumentorVersion,
   Map<String, String>? environment,
 }) {
@@ -1079,11 +1082,20 @@ bool shouldEmitSemconvInferenceTokenMetrics(
     return true;
   }
   final Map<String, String> env = environment ?? _safeMetricsEnvironment;
-  return !_instrumentorEmitsInferenceTokenMetrics(
-    hasGenAiInstrumentor: true,
-    instrumentorVersion: instrumentorVersion,
-    env: env,
-  );
+  final String? version =
+      (utilGenAiVersion ??
+              getUtilGenAiVersionForTest() ??
+              env['OTEL_UTIL_GENAI_VERSION'] ??
+              env['ADK_OTEL_UTIL_GENAI_VERSION'])
+          ?.trim();
+  if (version == null || version.isEmpty) {
+    return true;
+  }
+  return _compareInstrumentorVersions(
+        version,
+        lastUtilGenAiWithoutInferenceTokenMetrics,
+      ) <=
+      0;
 }
 
 /// Records semconv-genai inference token usage samples from [tokenUsage],

@@ -25,8 +25,10 @@ import 'base_telemetry_service.dart';
 import 'metrics.dart';
 import 'sqlite_span_exporter.dart';
 import '_experimental_semconv.dart' as experimental_semconv;
+import '_genai_instrumentor.dart';
 
 export '../utils/credential_names.dart';
+export '_genai_instrumentor.dart';
 
 /// Environment key controlling whether request and response payloads are
 /// captured in span attributes.
@@ -1021,7 +1023,7 @@ Future<T> useInferenceSpan<T>(
     );
   }
   final TraceSpanRecord span = tracer.startAsCurrentSpan(
-    'generate_content ${llmRequest.model ?? ''}',
+    'generate_content ${llmRequest.model ?? ''}'.trim(),
   );
   final GenerateContentSpan gcSpan = GenerateContentSpan(
     span,
@@ -1057,7 +1059,12 @@ Future<T> useInferenceSpan<T>(
       );
     }
 
-    return await run(gcSpan);
+    final Map<Object?, Object?> zoneValues = <Object?, Object?>{
+      _currentInferenceSpanContextKey: gcSpan,
+      if (isUtilGenAiClientInferenceContextEnabled)
+        currentClientInferenceContextKey: createClientInferenceData(),
+    };
+    return await runZoned(() => run(gcSpan), zoneValues: zoneValues);
   } catch (error) {
     caughtError = error;
     span.setAttribute('error.type', resolveErrorType(error));
@@ -1130,19 +1137,14 @@ Future<T> useInferenceSpan<T>(
         error: effectiveError,
       );
     }
-    if (shouldEmitSemconvInferenceTokenMetrics(
-      llmRequest.model,
-      hasGenAiInstrumentor: hasGenAiInst,
-      instrumentorVersion: _genAiInstrumentorVersion,
+    // ADK bypasses the instrumentor when it records the inference itself, so
+    // it always emits the semconv inference token metrics here.
+    recordSemconvInferenceTokenUsage(
+      llmRequest: llmRequest,
+      responses: gcSpan.responses,
+      error: effectiveError,
       environment: environment,
-    )) {
-      recordSemconvInferenceTokenUsage(
-        llmRequest: llmRequest,
-        responses: gcSpan.responses,
-        error: effectiveError,
-        environment: environment,
-      );
-    }
+    );
 
     if (useExperimentalSemconv) {
       experimental_semconv.maybeLogCompletionDetails(
@@ -2301,7 +2303,8 @@ void _setCommonGenerateContentAttributes(
 /// Callback that reports whether external GenAI instrumentation is active.
 typedef GenAiInstrumentationDetector = bool Function();
 
-GenAiInstrumentationDetector _genAiInstrumentationDetector = () => false;
+GenAiInstrumentationDetector? _genAiInstrumentationDetector;
+GenAiCallable? _genAiGenerateContentWrapper;
 String? _genAiInstrumentorVersion;
 
 /// Sets the detector used to identify external GenAI instrumentation.
@@ -2310,10 +2313,27 @@ String? _genAiInstrumentorVersion;
 void setGenAiInstrumentationDetectorForTest(
   GenAiInstrumentationDetector detector, {
   String? version,
+  String? utilGenAiVersion,
 }) {
   _genAiInstrumentationDetector = detector;
   _genAiInstrumentorVersion = version;
+  if (utilGenAiVersion != null) {
+    setUtilGenAiVersionForTest(utilGenAiVersion);
+  }
 }
+
+/// Sets the simulated wrapped `Models.generate_content` callable for tests.
+///
+/// When no explicit [GenAiInstrumentationDetector] override is installed,
+/// [isGenAiInstrumented] inspects this wrapper chain via
+/// [isGenAiInstrumentedCallable].
+void setGenAiGenerateContentWrapperForTest(GenAiCallable? wrapper) {
+  _genAiGenerateContentWrapper = wrapper;
+}
+
+/// Returns the simulated wrapped `Models.generate_content` callable, if set.
+GenAiCallable? getGenAiGenerateContentWrapperForTest() =>
+    _genAiGenerateContentWrapper;
 
 /// Sets the simulated `opentelemetry-instrumentation-google-genai` version for tests.
 void setGenAiInstrumentorVersionForTest(String? version) {
@@ -2327,18 +2347,46 @@ String? getGenAiInstrumentorVersionForTest() => _genAiInstrumentorVersion;
 ///
 /// This is intended for tests.
 void resetGenAiInstrumentationDetectorForTest() {
-  _genAiInstrumentationDetector = () => false;
+  _genAiInstrumentationDetector = null;
+  _genAiGenerateContentWrapper = null;
   _genAiInstrumentorVersion = null;
+  setUtilGenAiVersionForTest(null);
+  resetUtilGenAiClientInferenceContextHookForTest();
 }
 
 /// Returns `true` when external `opentelemetry-instrumentation-google-genai`
 /// instrumentation is active.
 bool isGenAiInstrumented() {
-  return _genAiInstrumentationDetector();
+  final GenAiInstrumentationDetector? detector = _genAiInstrumentationDetector;
+  if (detector != null) {
+    return detector();
+  }
+  return isGenAiInstrumentedCallable(_genAiGenerateContentWrapper);
 }
 
 bool _instrumentedWithOpenTelemetryInstrumentationGoogleGenai() {
-  return _genAiInstrumentationDetector();
+  return isGenAiInstrumented();
+}
+
+final Object _currentInferenceSpanContextKey = Object();
+
+/// Returns the active ADK [GenerateContentSpan] in the current [Zone], or
+/// `null` when outside an ADK-owned inference span.
+GenerateContentSpan? getCurrentInferenceSpan() {
+  final Object? value = Zone.current[_currentInferenceSpanContextKey];
+  return value is GenerateContentSpan ? value : null;
+}
+
+/// Returns [method] minus the `opentelemetry-instrumentation-google-genai`
+/// layer if ADK is currently recording the inference span itself.
+///
+/// When outside an ADK-owned [GenerateContentSpan] (including when the
+/// instrumentor is recording the inference), [method] is returned unchanged.
+GenAiCallable maybeWithoutGenAiInstrumentation(GenAiCallable method) {
+  if (getCurrentInferenceSpan() == null) {
+    return method;
+  }
+  return withoutGenAiInstrumentor(method);
 }
 
 final Object _generateContentExtraAttributesContextKey = Object();

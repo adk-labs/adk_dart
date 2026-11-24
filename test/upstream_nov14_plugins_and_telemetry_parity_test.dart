@@ -1334,12 +1334,12 @@ void main() {
         expect(cacheWrite.attributes['gen_ai.token.modality'], 'unknown');
       }
 
-      // Instrumentor version gating: 0.7b1 emits, 1.0b0 suppresses for Gemini
+      // opentelemetry-util-genai version gating: <= 1.3b0 emits, > 1.3b0 suppresses for Gemini
       expect(
         shouldEmitSemconvInferenceTokenMetrics(
           'gemini-2.5-flash',
           hasGenAiInstrumentor: true,
-          instrumentorVersion: '0.7b1',
+          utilGenAiVersion: '1.3b0',
         ),
         isTrue,
       );
@@ -1347,7 +1347,7 @@ void main() {
         shouldEmitSemconvInferenceTokenMetrics(
           'gemini-2.5-flash',
           hasGenAiInstrumentor: true,
-          instrumentorVersion: '1.0b0',
+          utilGenAiVersion: '1.4b0',
         ),
         isFalse,
       );
