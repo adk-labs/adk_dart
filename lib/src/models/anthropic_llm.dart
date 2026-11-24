@@ -248,11 +248,23 @@ Map<String, Object?> _fileDataToBlock(
   };
 }
 
-void _ensureMessagesEndWithUser(List<Map<String, Object?>> messages) {
-  if (messages.isNotEmpty && messages.last['role'] == 'user') {
+void _ensureMessagesEndWithUser(
+  List<Map<String, Object?>> messages, {
+  Set<int> transientIndices = const <int>{},
+}) {
+  Map<String, Object?>? lastNonTransient;
+  for (int index = messages.length - 1; index >= 0; index -= 1) {
+    if (!transientIndices.contains(index)) {
+      lastNonTransient = messages[index];
+      break;
+    }
+  }
+  if (lastNonTransient != null &&
+      lastNonTransient['role'] == 'user' &&
+      messages.last['role'] == 'user') {
     return;
   }
-  final String text = messages.isNotEmpty
+  final String text = lastNonTransient != null
       ? _continueOutputMessage
       : _emptyMessagesFallback;
   messages.add(<String, Object?>{
@@ -1481,23 +1493,27 @@ class AnthropicLlm extends BaseLlm {
     final _ToolUseIdSanitizer sanitizer = _ToolUseIdSanitizer();
     final Map<String, (String, String)> downloads =
         <String, (String, String)>{};
-    final List<Map<String, Object?>> messages = request.contents
-        .map(
-          (Content content) => _contentToMessageParam(
-            content,
-            sanitizer,
-            downloads: downloads,
-            gcsDownloader: gcsDownloader,
-          ),
-        )
-        .where((Map<String, Object?> message) {
-          final Object? content = message['content'];
-          return content is List
-              ? content.isNotEmpty
-              : (content is String && content.isNotEmpty);
-        })
-        .toList();
-    _ensureMessagesEndWithUser(messages);
+    final List<Map<String, Object?>> messages = <Map<String, Object?>>[];
+    final Set<int> transientIndices = <int>{};
+    for (final Content content in request.contents) {
+      final Map<String, Object?> message = _contentToMessageParam(
+        content,
+        sanitizer,
+        downloads: downloads,
+        gcsDownloader: gcsDownloader,
+      );
+      final Object? messageContent = message['content'];
+      final bool hasContent = messageContent is List
+          ? messageContent.isNotEmpty
+          : (messageContent is String && messageContent.isNotEmpty);
+      if (hasContent) {
+        if (isTransientUserContent(request, content)) {
+          transientIndices.add(messages.length);
+        }
+        messages.add(message);
+      }
+    }
+    _ensureMessagesEndWithUser(messages, transientIndices: transientIndices);
     List<Map<String, Object?>> tools = <Map<String, Object?>>[];
     final List<ToolDeclaration>? declarations = request.config.tools;
     if (declarations != null) {
@@ -1550,11 +1566,18 @@ class AnthropicLlm extends BaseLlm {
   }
 
   LlmRequest _cloneRequestPreservingFunctionCallIds(LlmRequest request) {
+    final List<Content> clonedContents = <Content>[];
+    final List<Content> clonedTransient = <Content>[];
+    for (final Content content in request.contents) {
+      final Content copy = content.copyWith();
+      clonedContents.add(copy);
+      if (isTransientUserContent(request, content)) {
+        clonedTransient.add(copy);
+      }
+    }
     return LlmRequest(
       model: request.model,
-      contents: request.contents
-          .map((Content content) => content.copyWith())
-          .toList(),
+      contents: clonedContents,
       config: request.config.copyWith(),
       liveConnectConfig: request.liveConnectConfig.copyWith(),
       toolsDict: Map<String, BaseTool>.from(request.toolsDict),
@@ -1562,6 +1585,12 @@ class AnthropicLlm extends BaseLlm {
       cacheMetadata: request.cacheMetadata,
       cacheableContentsTokenCount: request.cacheableContentsTokenCount,
       previousInteractionId: request.previousInteractionId,
+      isManagedAgent: request.isManagedAgent,
+      serviceTier: request.serviceTier,
+      dynamicInstructions: request.dynamicInstructions,
+      hasStaticInstruction: request.hasStaticInstruction,
+      staticInstructionPrefixEndIndex: request.staticInstructionPrefixEndIndex,
+      transientUserContents: clonedTransient,
     );
   }
 

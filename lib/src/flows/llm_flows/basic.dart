@@ -17,8 +17,9 @@ class BasicLlmRequestProcessor extends BaseLlmRequestProcessor {
   ) async* {
     final LlmAgent agent = invocationContext.agent as LlmAgent;
     llmRequest.model = agent.canonicalModel.model;
-    llmRequest.config =
-        agent.generateContentConfig?.copyWith() ?? GenerateContentConfig();
+    llmRequest.config = agent.generateContentConfig != null
+        ? copyRequestScopedFields(agent.generateContentConfig!)
+        : GenerateContentConfig();
 
     // Keep parity with Python behavior: set output schema directly when tools
     // are absent or when model supports native schema+tools together.

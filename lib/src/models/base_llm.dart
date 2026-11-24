@@ -17,6 +17,10 @@ abstract class BaseLlm {
   /// Self-reported capabilities snapshot for this LLM instance.
   LlmCapabilities get capabilities => LlmCapabilities.defaultCapabilities;
 
+  /// Whether tool dynamic instructions can be routed into request `contents`
+  /// instead of `systemInstruction`.
+  bool get supportsDynamicInstructionRouting => true;
+
   /// Generates model responses for [request].
   ///
   /// When [stream] is true, implementations may emit partial responses.
@@ -27,7 +31,8 @@ abstract class BaseLlm {
 
   /// Appends a fallback user turn when [request] has no trailing user content.
   void maybeAppendUserContent(LlmRequest request) {
-    if (request.contents.isEmpty) {
+    final Content? lastContent = lastNonTransientContent(request);
+    if (lastContent == null) {
       request.contents.add(
         Content.userText(
           'Handle the requests as specified in the System Instruction.',
@@ -36,7 +41,7 @@ abstract class BaseLlm {
       return;
     }
 
-    if (request.contents.last.role != 'user') {
+    if (lastContent.role != 'user' || request.contents.last.role != 'user') {
       request.contents.add(
         Content.userText(
           'Continue processing previous requests as instructed. Exit or provide a summary if no more outputs are needed.',

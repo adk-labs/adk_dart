@@ -84,6 +84,10 @@ class CascadeLive extends BaseLlm {
   @override
   LlmCapabilities get capabilities => _resolveLlm().capabilities;
 
+  @override
+  bool get supportsDynamicInstructionRouting =>
+      _resolveLlm().supportsDynamicInstructionRouting;
+
   /// Serializes this model configuration to a JSON-compatible map without
   /// leaking the cached [BaseLlm] instance.
   Map<String, Object?> toJson() {

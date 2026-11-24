@@ -41,6 +41,21 @@ import 'instructions.dart' show labelDynamicInstruction;
 import 'output_schema_processor.dart' as output_schema;
 import 'persist_barrier.dart';
 
+bool _routesIntoContents(InvocationContext invocationContext) {
+  if (invocationContext.liveRequestQueue != null) {
+    return false;
+  }
+  final RunConfig? runConfig = invocationContext.runConfig;
+  if (runConfig != null && runConfig.supportCfc) {
+    return false;
+  }
+  final BaseAgent agent = invocationContext.agent;
+  if (agent is LlmAgent) {
+    return agent.canonicalModel.supportsDynamicInstructionRouting;
+  }
+  return true;
+}
+
 /// Finalizes and resolves tool-contributed dynamic instructions on [llmRequest].
 Future<void> finalizeDynamicInstructions(
   InvocationContext invocationContext,
@@ -52,7 +67,9 @@ Future<void> finalizeDynamicInstructions(
 
   final String combinedText = llmRequest.dynamicInstructions.join('\n\n');
 
-  if (isFeatureEnabled(FeatureName.dynamicInstructionRouting)) {
+  // Check routing support first: isFeatureEnabled warns while experimental.
+  if (_routesIntoContents(invocationContext) &&
+      isFeatureEnabled(FeatureName.dynamicInstructionRouting)) {
     final Content instructionContent = Content(
       role: 'user',
       parts: <Part>[Part.text(labelDynamicInstruction(combinedText))],
@@ -651,6 +668,15 @@ class BaseLlmFlow {
     }
   }
 
+  /// Screens live user [content] with before-model callbacks on a copy of
+  /// [request] so callbacks cannot mutate the live session request's config or
+  /// tools.
+  Future<Event?> screenLiveUserContent(
+    InvocationContext context,
+    Content content,
+    LlmRequest request,
+  ) => _screenLiveUserContent(context, content, request);
+
   Future<Event?> _screenLiveUserContent(
     InvocationContext context,
     Content content,
@@ -662,14 +688,18 @@ class BaseLlmFlow {
     final LlmRequest callbackRequest = LlmRequest(
       model: request.model,
       contents: <Content>[content.copyWith()],
-      config: request.config.copyWith(),
+      config: copyRequestScopedFields(request.config),
       liveConnectConfig: request.liveConnectConfig.copyWith(),
       toolsDict: Map<String, BaseTool>.from(request.toolsDict),
       cacheConfig: request.cacheConfig,
       cacheMetadata: request.cacheMetadata,
       cacheableContentsTokenCount: request.cacheableContentsTokenCount,
       previousInteractionId: request.previousInteractionId,
+      isManagedAgent: request.isManagedAgent,
       serviceTier: request.serviceTier,
+      dynamicInstructions: request.dynamicInstructions,
+      hasStaticInstruction: request.hasStaticInstruction,
+      staticInstructionPrefixEndIndex: request.staticInstructionPrefixEndIndex,
     );
     final Event callbackResponseEvent = Event(
       id: Event.newId(),

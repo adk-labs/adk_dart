@@ -52,6 +52,28 @@ const String _truncatedStreamErrorMessage =
     'The stream ended without a finish reason; the response may be truncated.';
 const int _maxJsonDepth = 500;
 final RegExp _hugeIntLiteralPattern = RegExp(r'\d{4301,}');
+const String _proxyProvider = 'litellm_proxy';
+const Set<String> _dynamicInstructionRoutingProviders = <String>{
+  'anthropic',
+  'azure',
+  'openai',
+};
+const Set<String> _routingBedrockProviders = <String>{
+  'bedrock',
+  'bedrock_converse',
+};
+const Set<String> _routingVertexProviders = <String>{
+  'vertex_ai',
+  'vertex_ai_beta',
+};
+
+String _stripProxyPrefix(String model) {
+  final String lower = model.toLowerCase();
+  if (lower.startsWith('$_proxyProvider/')) {
+    return model.substring(_proxyProvider.length + 1);
+  }
+  return model;
+}
 
 /// OpenAI-compatible adapter that targets LiteLLM providers.
 ///
@@ -112,10 +134,11 @@ class LiteLlm extends BaseLlm {
 
   /// Infers the LiteLLM provider from [model].
   static String getProviderFromModel(String model) {
-    if (model.contains('/')) {
-      return model.split('/').first.toLowerCase();
+    final String normalized = _stripProxyPrefix(model);
+    if (normalized.contains('/')) {
+      return normalized.split('/').first.toLowerCase();
     }
-    final String lower = model.toLowerCase();
+    final String lower = normalized.toLowerCase();
     if (lower.contains('azure')) {
       return 'azure';
     }
@@ -124,6 +147,47 @@ class LiteLlm extends BaseLlm {
     }
     return '';
   }
+
+  /// Whether [model] (with optional [customLlmProvider]) accepts tool->user
+  /// and user->user turns required for dynamic instruction routing.
+  static bool supportsDynamicInstructionRoutingForModel(
+    String model, {
+    String? customLlmProvider,
+  }) {
+    final String custom = (customLlmProvider ?? '').trim().toLowerCase();
+    final String provider = (custom.isNotEmpty && custom != _proxyProvider)
+        ? custom
+        : getProviderFromModel(model);
+    if (_dynamicInstructionRoutingProviders.contains(provider)) {
+      return true;
+    }
+    String modelPart = model.trim().toLowerCase();
+    if (modelPart.startsWith('$_proxyProvider/')) {
+      modelPart = modelPart.substring(_proxyProvider.length + 1);
+    }
+    if (provider.isNotEmpty && modelPart.startsWith('$provider/')) {
+      modelPart = modelPart.substring(provider.length + 1);
+    }
+    if (_routingBedrockProviders.contains(provider)) {
+      return modelPart.contains('anthropic') || modelPart.contains('claude');
+    }
+    if (_routingVertexProviders.contains(provider)) {
+      return modelPart.contains('anthropic') ||
+          modelPart.contains('claude') ||
+          isGeminiModel(modelPart);
+    }
+    if (provider == 'gemini') {
+      return isGeminiModel(modelPart);
+    }
+    return false;
+  }
+
+  @override
+  bool get supportsDynamicInstructionRouting =>
+      supportsDynamicInstructionRoutingForModel(
+        model,
+        customLlmProvider: customProvider,
+      );
 
   /// Builds a LiteLLM/OpenAI-style request payload from [request].
   static Map<String, Object?> buildPayload(

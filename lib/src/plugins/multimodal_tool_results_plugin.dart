@@ -302,7 +302,9 @@ class MultimodalToolResultsPlugin extends BasePlugin {
       }
 
       if (partsToAttach.isNotEmpty) {
-        llmRequest.contents.last.parts.addAll(
+        final Content targetContent =
+            lastNonTransientContent(llmRequest) ?? llmRequest.contents.last;
+        targetContent.parts.addAll(
           partsToAttach.map((Part p) => p.copyWith()),
         );
       }
@@ -311,7 +313,9 @@ class MultimodalToolResultsPlugin extends BasePlugin {
         callbackContext.state[partsReturnedByToolsStateKey],
       );
       if (savedParts != null && savedParts.isNotEmpty) {
-        llmRequest.contents.last.parts.addAll(
+        final Content targetContent =
+            lastNonTransientContent(llmRequest) ?? llmRequest.contents.last;
+        targetContent.parts.addAll(
           savedParts.map((Part part) => part.copyWith()),
         );
         callbackContext.state[partsReturnedByToolsStateKey] = <Part>[];

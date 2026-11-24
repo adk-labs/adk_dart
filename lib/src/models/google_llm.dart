@@ -158,6 +158,9 @@ class Gemini extends BaseLlm {
   GoogleLLMVariant get apiBackend =>
       apiBackendOverride ?? getGoogleLlmVariant(environment: environment);
 
+  @override
+  bool get supportsDynamicInstructionRouting => !useInteractionsApi;
+
   _NormalizedGeminiEndpoint get _normalizedEndpoint =>
       _normalizeGeminiEndpoint(baseUrl);
 

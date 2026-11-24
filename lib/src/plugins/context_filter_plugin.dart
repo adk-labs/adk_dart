@@ -45,11 +45,18 @@ bool _isHumanUserContent(Content content) {
   return content.role == 'user' && !_isFunctionResponseContent(content);
 }
 
-List<int> _getInvocationStartIndices(List<Content> contents) {
+List<int> _getInvocationStartIndices(
+  List<Content> contents, {
+  LlmRequest? llmRequest,
+}) {
   final List<int> indices = <int>[];
   bool previousWasHumanUser = false;
 
   for (int i = 0; i < contents.length; i += 1) {
+    if (llmRequest != null &&
+        isTransientUserContent(llmRequest, contents[i])) {
+      continue;
+    }
     final bool isHumanUser = _isHumanUserContent(contents[i]);
     if (isHumanUser && !previousWasHumanUser) {
       indices.add(i);
@@ -85,6 +92,7 @@ class ContextFilterPlugin extends BasePlugin {
       if (keep != null && keep > 0) {
         final List<int> invocationStartIndices = _getInvocationStartIndices(
           contents,
+          llmRequest: llmRequest,
         );
         if (invocationStartIndices.length > keep) {
           int splitIndex =
@@ -93,6 +101,10 @@ class ContextFilterPlugin extends BasePlugin {
             contents,
             splitIndex,
           );
+          while (splitIndex > 0 &&
+              isTransientUserContent(llmRequest, contents[splitIndex - 1])) {
+            splitIndex -= 1;
+          }
           contents = contents.sublist(splitIndex);
         }
       }

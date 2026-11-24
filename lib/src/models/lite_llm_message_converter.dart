@@ -22,6 +22,9 @@ void _appendFallbackUserContentIfMissing(LlmRequest request) {
     if (content.role != 'user') {
       continue;
     }
+    if (isTransientUserContent(request, content)) {
+      continue;
+    }
     if (content.parts.any(_partHasPayload)) {
       return;
     }

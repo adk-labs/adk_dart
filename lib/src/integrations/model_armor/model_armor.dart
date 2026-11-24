@@ -646,6 +646,9 @@ Content? _findLatestUserContentWithText(LlmRequest llmRequest) {
     if (content.role != 'user') {
       continue;
     }
+    if (isTransientUserContent(llmRequest, content)) {
+      continue;
+    }
     final bool hasNonThoughtText = content.parts.any(
       (Part part) => !part.thought && part.text != null && part.text!.isNotEmpty,
     );

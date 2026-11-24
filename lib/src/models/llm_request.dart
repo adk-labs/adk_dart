@@ -20,6 +20,22 @@ ToolDeclaration? _findToolWithFunctionDeclarations(LlmRequest request) {
   return null;
 }
 
+/// Returns whether ADK inserted [content] as transient user context on
+/// [llmRequest] rather than the user.
+bool isTransientUserContent(LlmRequest llmRequest, Content content) =>
+    llmRequest.isTransientUserContent(content);
+
+/// Returns the last content in [llmRequest] not inserted as transient ADK
+/// context, or `null` if none exists.
+Content? lastNonTransientContent(LlmRequest llmRequest) =>
+    llmRequest.lastNonTransientContent;
+
+/// Copies request-scoped mutable containers on [config] so per-request
+/// assembly or callbacks do not mutate the source configuration.
+GenerateContentConfig copyRequestScopedFields(GenerateContentConfig config) {
+  return config.copyWith();
+}
+
 const Object _declarationUnset = Object();
 
 /// Function-calling declaration exposed to the model.
@@ -751,19 +767,56 @@ class LlmRequest {
     List<String>? dynamicInstructions,
     this.hasStaticInstruction = false,
     this.staticInstructionPrefixEndIndex,
+    List<Content>? transientUserContents,
   }) : contents = contents ?? <Content>[],
        config = config ?? GenerateContentConfig(),
        liveConnectConfig = liveConnectConfig ?? LiveConnectConfig(),
        toolsDict = toolsDict ?? <String, BaseTool>{},
        _dynamicInstructions = dynamicInstructions == null
            ? <String>[]
-           : List<String>.from(dynamicInstructions);
+           : List<String>.from(dynamicInstructions),
+       _transientUserContents = transientUserContents == null
+           ? <Content>[]
+           : List<Content>.from(transientUserContents);
 
   final List<String> _dynamicInstructions;
+  final List<Content> _transientUserContents;
 
   /// Dynamic instructions contributed by tools during preprocessing.
   List<String> get dynamicInstructions =>
       List<String>.unmodifiable(_dynamicInstructions);
+
+  /// Non-static transient user contents inserted by [insertTransientUserContent].
+  List<Content> get transientUserContents =>
+      List<Content>.unmodifiable(_transientUserContents);
+
+  /// Returns whether [content] was inserted by ADK as transient user context.
+  bool isTransientUserContent(Content content) {
+    for (final Content added in _transientUserContents) {
+      if (identical(added, content)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// The last entry in [contents] not inserted as transient ADK context.
+  Content? get lastNonTransientContent {
+    for (int i = contents.length - 1; i >= 0; i -= 1) {
+      final Content content = contents[i];
+      if (!isTransientUserContent(content)) {
+        return content;
+      }
+    }
+    return null;
+  }
+
+  /// Replaces the tracked transient user content references.
+  void setTransientUserContents(Iterable<Content> transientContents) {
+    _transientUserContents
+      ..clear()
+      ..addAll(transientContents);
+  }
 
   /// Appends tool-contributed dynamic [instructions] to be finalized at the end
   /// of request preprocessing.
@@ -953,6 +1006,8 @@ class LlmRequest {
       return;
     }
 
+    _transientUserContents.addAll(copied);
+
     int insertIndex = contents.length;
     for (int i = contents.length - 1; i >= 0; i -= 1) {
       final Content content = contents[i];
@@ -1016,9 +1071,18 @@ class LlmRequest {
   ///
   /// ADK-generated function IDs are stripped to match provider expectations.
   LlmRequest sanitizedForModelCall() {
+    final List<Content> clonedContents = <Content>[];
+    final List<Content> clonedTransient = <Content>[];
+    for (final Content content in contents) {
+      final Content copy = content.copyWith();
+      clonedContents.add(copy);
+      if (isTransientUserContent(content)) {
+        clonedTransient.add(copy);
+      }
+    }
     final LlmRequest clone = LlmRequest(
       model: model,
-      contents: contents.map((content) => content.copyWith()).toList(),
+      contents: clonedContents,
       config: config.copyWith(),
       liveConnectConfig: liveConnectConfig.copyWith(),
       toolsDict: Map<String, BaseTool>.from(toolsDict),
@@ -1031,6 +1095,7 @@ class LlmRequest {
       dynamicInstructions: _dynamicInstructions,
       hasStaticInstruction: hasStaticInstruction,
       staticInstructionPrefixEndIndex: staticInstructionPrefixEndIndex,
+      transientUserContents: clonedTransient,
     );
 
     for (final Content content in clone.contents) {

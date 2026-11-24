@@ -60,6 +60,7 @@ int? _extractStatusCode(Object error) {
 class _RequestSnapshot {
   _RequestSnapshot({
     required this.contents,
+    required this.transientContentIndices,
     required this.config,
     required this.liveConnectConfig,
     required this.dynamicInstructions,
@@ -69,6 +70,7 @@ class _RequestSnapshot {
   });
 
   final List<Content> contents;
+  final List<int> transientContentIndices;
   final GenerateContentConfig config;
   final LiveConnectConfig liveConnectConfig;
   final List<String> dynamicInstructions;
@@ -77,8 +79,18 @@ class _RequestSnapshot {
   final int? staticInstructionPrefixEndIndex;
 
   factory _RequestSnapshot.of(LlmRequest request) {
+    final List<Content> copiedContents = <Content>[];
+    final List<int> transientIndices = <int>[];
+    for (int i = 0; i < request.contents.length; i += 1) {
+      final Content content = request.contents[i];
+      copiedContents.add(content.copyWith());
+      if (isTransientUserContent(request, content)) {
+        transientIndices.add(i);
+      }
+    }
     return _RequestSnapshot(
-      contents: request.contents.map((Content c) => c.copyWith()).toList(),
+      contents: copiedContents,
+      transientContentIndices: transientIndices,
       config: request.config.copyWith(),
       liveConnectConfig: request.liveConnectConfig.copyWith(),
       dynamicInstructions: List<String>.from(request.dynamicInstructions),
@@ -89,7 +101,16 @@ class _RequestSnapshot {
   }
 
   void restore(LlmRequest request) {
-    request.contents = contents.map((Content c) => c.copyWith()).toList();
+    final List<Content> restoredContents = contents
+        .map((Content c) => c.copyWith())
+        .toList();
+    final List<Content> restoredTransient = <Content>[
+      for (final int index in transientContentIndices)
+        if (index >= 0 && index < restoredContents.length)
+          restoredContents[index],
+    ];
+    request.contents = restoredContents;
+    request.setTransientUserContents(restoredTransient);
     request.config = config.copyWith();
     request.liveConnectConfig = liveConnectConfig.copyWith();
     request
@@ -164,6 +185,49 @@ class FallbackModel extends BaseLlm {
 
   @override
   LlmCapabilities get capabilities => _delegate(models.first).capabilities;
+
+  @override
+  bool get supportsDynamicInstructionRouting {
+    final List<String> unresolved = <String>[];
+    for (final Object entry in models) {
+      if (entry is BaseLlm) {
+        if (!entry.supportsDynamicInstructionRouting) {
+          return false;
+        }
+      } else if (entry is String) {
+        final BaseLlm? built = _resolved[entry];
+        if (built != null) {
+          if (!built.supportsDynamicInstructionRouting) {
+            return false;
+          }
+        } else {
+          unresolved.add(entry);
+        }
+      } else {
+        return false;
+      }
+    }
+    for (final String modelName in unresolved) {
+      if (!_modelNameSupportsDynamicInstructionRouting(modelName)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static bool _modelNameSupportsDynamicInstructionRouting(String model) {
+    try {
+      final LlmFactory factory = LLMRegistry.resolve(model);
+      return factory(model).supportsDynamicInstructionRouting;
+    } catch (error) {
+      developer.log(
+        'Assuming model "$model" does not support dynamic instruction routing '
+        'after resolution/instantiation failed: $error',
+        name: 'adk_dart.models.fallback',
+      );
+      return false;
+    }
+  }
 
   @override
   Stream<LlmResponse> generateContent(
