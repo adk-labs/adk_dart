@@ -19,6 +19,7 @@ Future<int> main(
   IOSink? outSink,
   IOSink? errSink,
   Map<String, String>? environment,
+  AgentEngineRuntimesClient? agentEngineClient,
 }) async {
   if (args.isEmpty) {
     return runAdkCli(args, outSink: outSink, errSink: errSink);
@@ -38,6 +39,7 @@ Future<int> main(
         outSink: outSink,
         errSink: errSink,
         environment: environment,
+        agentEngineClient: agentEngineClient,
       );
     case 'generate_agent_card':
     case 'generate-agent-card':

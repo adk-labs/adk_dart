@@ -47,6 +47,7 @@ class DeployCommand {
     this.envVars = const <String>[],
     this.apiKey,
     this.agentEngineId,
+    this.updateIfExists = false,
     this.displayName = '',
     this.description = '',
     this.agentEngineConfigFile = '',
@@ -144,6 +145,10 @@ class DeployCommand {
   /// Optional Agent Engine instance ID to update.
   final String? agentEngineId;
 
+  /// Whether to update a single matching Agent Engine runtime in place when
+  /// [agentEngineId] is not provided.
+  final bool updateIfExists;
+
   /// Display name of the agent in Agent Engine.
   final String displayName;
 
@@ -218,6 +223,7 @@ class DeployCliOptions {
     this.envVars = const <String>[],
     this.apiKey,
     this.agentEngineId,
+    this.updateIfExists = false,
     this.displayName = '',
     this.description = '',
     this.agentEngineConfigFile = '',
@@ -320,6 +326,10 @@ class DeployCliOptions {
   /// Optional Agent Engine instance ID to update.
   final String? agentEngineId;
 
+  /// Whether to update a single matching Agent Engine runtime in place when
+  /// [agentEngineId] is not provided.
+  final bool updateIfExists;
+
   /// Display name of the agent in Agent Engine.
   final String displayName;
 
@@ -401,6 +411,7 @@ Options:
   -e, --env                              Environment variable KEY=VALUE (repeatable)
       --api_key                          API key for Agent Engine Express Mode
       --agent_engine_id                  Agent Engine instance ID to update
+      --update_if_exists                 Update existing Agent Engine runtime with same display name
       --display_name                     Display name of the agent in Agent Engine
       --description                      Description of the agent in Agent Engine
       --agent_engine_config_file         Filepath to .agent_engine_config.json
@@ -893,6 +904,7 @@ Future<int> runDeployCommand(
   IOSink? errSink,
   Map<String, String>? environment,
   DeployCommandRunner? commandRunner,
+  AgentEngineRuntimesClient? agentEngineClient,
 }) async {
   final IOSink out = outSink ?? stdout;
   final IOSink err = errSink ?? stderr;
@@ -921,6 +933,44 @@ Future<int> runDeployCommand(
 
   for (final String warning in options.warnings) {
     err.writeln(warning);
+  }
+
+  if (options.target == DeployTarget.agentEngine) {
+    if (agentEngineClient != null && !options.dryRun) {
+      try {
+        await deployToAgentEngine(
+          client: agentEngineClient,
+          agentFolder: options.agentFolder,
+          project: options.project,
+          region: options.region,
+          appName: options.appName,
+          agentEngineId: options.agentEngineId,
+          displayName: options.displayName,
+          description: options.description,
+          agentEngineConfigFile: options.agentEngineConfigFile,
+          updateIfExists: options.updateIfExists,
+          out: out,
+          err: err,
+        );
+        return 0;
+      } on AgentEngineDeployException catch (error) {
+        err.writeln(error.message);
+        return 1;
+      } on ArgumentError catch (error) {
+        err.writeln('${error.message}');
+        err.writeln(deployUsage);
+        return 64;
+      }
+    }
+    if (options.updateIfExists &&
+        (options.project.isEmpty || options.region.isEmpty)) {
+      err.writeln(
+        '--update_if_exists requires a Google Cloud project and region '
+        '(not supported in Express Mode); replace --update_if_exists with '
+        '--agent_engine_id, or pass --project and --region.',
+      );
+      return 1;
+    }
   }
 
   final DeployCommand command = DeployCommand(
@@ -953,6 +1003,7 @@ Future<int> runDeployCommand(
     envVars: options.envVars,
     apiKey: options.apiKey,
     agentEngineId: options.agentEngineId,
+    updateIfExists: options.updateIfExists,
     displayName: options.displayName,
     description: options.description,
     agentEngineConfigFile: options.agentEngineConfigFile,
@@ -1024,6 +1075,7 @@ DeployCliOptions _parseDeployOptions(
   final List<String> envVars = <String>[];
   String? apiKey;
   String? agentEngineId;
+  bool updateIfExists = false;
   String displayName = '';
   String description = '';
   String agentEngineConfigFile = '';
@@ -1448,6 +1500,10 @@ DeployCliOptions _parseDeployOptions(
       agentEngineId = arg.substring('--agent-engine-id='.length);
       continue;
     }
+    if (arg == '--update_if_exists' || arg == '--update-if-exists') {
+      updateIfExists = true;
+      continue;
+    }
     if (arg == '--display_name' || arg == '--display-name') {
       displayName = _nextArg(args, i, arg);
       i += 1;
@@ -1567,6 +1623,14 @@ DeployCliOptions _parseDeployOptions(
     extraArgs.add(arg);
   }
 
+  if (agentEngineId != null &&
+      agentEngineId.trim().isNotEmpty &&
+      updateIfExists) {
+    throw ArgumentError(
+      'Do not pass both --agent_engine_id and --update_if_exists.',
+    );
+  }
+
   if (explicitValidateAgentImport == true && skipAgentImportValidation) {
     throw ArgumentError(
       'Do not pass both --validate-agent-import and --skip-agent-import-validation.',
@@ -1659,6 +1723,7 @@ DeployCliOptions _parseDeployOptions(
     envVars: envVars,
     apiKey: apiKey,
     agentEngineId: agentEngineId,
+    updateIfExists: updateIfExists,
     displayName: displayName,
     description: description,
     agentEngineConfigFile: agentEngineConfigFile,
@@ -1912,8 +1977,253 @@ Map<String, Object?> resolveAgentEngineConfig({
   return agentConfig;
 }
 
+/// Exception raised when Agent Engine deployment resolution or lookup fails.
+class AgentEngineDeployException implements Exception {
+  /// Creates an [AgentEngineDeployException] with [message] and optional [cause].
+  const AgentEngineDeployException(this.message, {this.cause});
+
+  /// Human-readable error message.
+  final String message;
+
+  /// Optional underlying cause.
+  final Object? cause;
+
+  @override
+  String toString() => message;
+}
+
+/// Metadata describing an existing or newly created Agent Engine runtime.
+class AgentEngineRuntimeInfo {
+  /// Creates an [AgentEngineRuntimeInfo] entry.
+  const AgentEngineRuntimeInfo({
+    required this.name,
+    this.displayName,
+    this.updateTime,
+  });
+
+  /// Full resource name of the Agent Engine runtime.
+  final String name;
+
+  /// Optional display name of the Agent Engine runtime.
+  final String? displayName;
+
+  /// Optional last update timestamp string.
+  final String? updateTime;
+}
+
+/// Client interface for Vertex AI Agent Engine runtime lifecycle operations.
+abstract class AgentEngineRuntimesClient {
+  /// Lists Agent Runtimes matching an optional AIP-160 [filter] expression.
+  Future<List<AgentEngineRuntimeInfo>> list({String? filter});
+
+  /// Creates a new empty Agent Runtime instance.
+  Future<AgentEngineRuntimeInfo> create();
+
+  /// Updates an existing Agent Runtime identified by [name] with [config].
+  Future<void> update({
+    required String name,
+    required Map<String, Object?> config,
+  });
+
+  /// Deletes an Agent Runtime identified by [name].
+  Future<void> delete({required String name});
+}
+
+/// Formats an [AgentEngineRuntimeInfo] entry for CLI warnings and errors.
+String formatAgentEngineRuntime(AgentEngineRuntimeInfo runtime) {
+  final String updateTime =
+      (runtime.updateTime == null || runtime.updateTime!.isEmpty)
+      ? '?'
+      : runtime.updateTime!;
+  return '  ${runtime.name}  (updated $updateTime)';
+}
+
+/// Looks up existing Agent Runtimes with [displayName].
+///
+/// When [raiseOnError] is `false`, errors or an empty [displayName] degrade to
+/// an empty list so default creates are not blocked. When `true`, they throw
+/// [AgentEngineDeployException] so `--update_if_exists` never silently creates
+/// a duplicate instead of updating.
+Future<List<AgentEngineRuntimeInfo>> findAgentEngineRuntimesByDisplayName(
+  AgentEngineRuntimesClient client,
+  String? displayName, {
+  bool raiseOnError = false,
+}) async {
+  if (displayName == null || displayName.isEmpty) {
+    if (raiseOnError) {
+      throw const AgentEngineDeployException(
+        'Cannot resolve existing Agent Runtimes for --update_if_exists '
+        'without a non-empty display name.',
+      );
+    }
+    return const <AgentEngineRuntimeInfo>[];
+  }
+  final String escaped = displayName
+      .replaceAll(r'\', r'\\')
+      .replaceAll('"', r'\"');
+  try {
+    return await client.list(filter: 'display_name="$escaped"');
+  } on Object catch (error) {
+    if (raiseOnError) {
+      throw AgentEngineDeployException(
+        'Failed to look up existing Agent Runtimes with display name '
+        '"$displayName" for --update_if_exists: $error',
+        cause: error,
+      );
+    }
+    return const <AgentEngineRuntimeInfo>[];
+  }
+}
+
+/// Deploys an agent to Vertex AI Agent Engine using [client].
+///
+/// Handles duplicate display-name warnings, `--update_if_exists` resolution,
+/// Express Mode validation, resource name normalization, and cleanup of newly
+/// created runtimes on update failure (while preserving pre-existing runtimes).
+Future<String> deployToAgentEngine({
+  required AgentEngineRuntimesClient client,
+  String? agentFolder,
+  String? project,
+  String? region,
+  String? appName,
+  String? agentEngineId,
+  String displayName = '',
+  String description = '',
+  String agentEngineConfigFile = '',
+  bool updateIfExists = false,
+  IOSink? out,
+  IOSink? err,
+  Future<void> Function(String resourceName, Map<String, Object?> agentConfig)?
+  onPrepareDeployment,
+}) async {
+  final String? normalizedAgentEngineId =
+      (agentEngineId != null && agentEngineId.trim().isNotEmpty)
+      ? agentEngineId.trim()
+      : null;
+  if (normalizedAgentEngineId != null && updateIfExists) {
+    throw ArgumentError(
+      'Do not pass both --agent_engine_id and --update_if_exists.',
+    );
+  }
+
+  final Map<String, Object?> agentConfig =
+      (agentFolder != null && agentFolder.trim().isNotEmpty) ||
+          agentEngineConfigFile.trim().isNotEmpty
+      ? resolveAgentEngineConfig(
+          agentFolder: agentFolder ?? '.',
+          agentEngineConfigFile: agentEngineConfigFile,
+          displayName: displayName,
+          description: description,
+          appName: appName,
+          out: out,
+        )
+      : <String, Object?>{
+          if (displayName.isNotEmpty) 'display_name': displayName,
+          if (description.isNotEmpty) 'description': description,
+        };
+  agentConfig['agent_framework'] = 'google-adk';
+
+  final String? normalizedProject =
+      (project != null && project.trim().isNotEmpty) ? project.trim() : null;
+  final String? normalizedRegion = (region != null && region.trim().isNotEmpty)
+      ? region.trim()
+      : null;
+  final bool hasProjectAndRegion =
+      normalizedProject != null && normalizedRegion != null;
+
+  String? resourceName = normalizedAgentEngineId;
+  bool createdHere = false;
+
+  if (resourceName == null) {
+    if (updateIfExists && !hasProjectAndRegion) {
+      throw const AgentEngineDeployException(
+        '--update_if_exists requires a Google Cloud project and region '
+        '(not supported in Express Mode); replace --update_if_exists with '
+        '--agent_engine_id, or pass --project and --region.',
+      );
+    }
+    final Object? configDisplayName = agentConfig['display_name'];
+    final String? resolvedDisplayName =
+        (configDisplayName is String && configDisplayName.isNotEmpty)
+        ? configDisplayName
+        : (displayName.isNotEmpty ? displayName : null);
+
+    final List<AgentEngineRuntimeInfo> matches = hasProjectAndRegion
+        ? await findAgentEngineRuntimesByDisplayName(
+            client,
+            resolvedDisplayName,
+            raiseOnError: updateIfExists,
+          )
+        : const <AgentEngineRuntimeInfo>[];
+
+    if (updateIfExists && matches.length == 1) {
+      resourceName = matches.first.name;
+      out?.writeln(
+        'Updating existing instance with display name '
+        '"$resolvedDisplayName": $resourceName',
+      );
+    } else if (updateIfExists && matches.length > 1) {
+      final String candidates = matches
+          .map(formatAgentEngineRuntime)
+          .join('\n');
+      throw AgentEngineDeployException(
+        '${matches.length} Agent Runtimes have display name '
+        '"$resolvedDisplayName"; replace --update_if_exists with '
+        '--agent_engine_id to pick one:\n$candidates',
+      );
+    } else {
+      if (matches.isNotEmpty) {
+        final String candidates = matches
+            .map(formatAgentEngineRuntime)
+            .join('\n');
+        err?.writeln(
+          'WARNING: ${matches.length} Agent Runtime(s) with display name '
+          '"$resolvedDisplayName" already exist in '
+          '$normalizedProject/$normalizedRegion; a NEW instance will be created:\n'
+          '$candidates\n'
+          'To update in place, re-run with --agent_engine_id=<ID> '
+          '(--update_if_exists only works once extra duplicates are '
+          'deleted down to a single instance).',
+        );
+      }
+      final AgentEngineRuntimeInfo runtime = await client.create();
+      resourceName = runtime.name;
+      createdHere = true;
+      out?.writeln('Created a new instance: $resourceName');
+    }
+  } else if (hasProjectAndRegion && !resourceName.startsWith('projects/')) {
+    resourceName =
+        'projects/$normalizedProject/locations/$normalizedRegion/reasoningEngines/$resourceName';
+  }
+
+  if (onPrepareDeployment != null) {
+    await onPrepareDeployment(resourceName, agentConfig);
+  }
+
+  try {
+    await client.update(name: resourceName, config: agentConfig);
+  } on Object catch (error) {
+    err?.writeln('Failed to deploy to Agent Platform: $error');
+    // Only delete the instance if it was newly created in this function.
+    if (createdHere) {
+      await client.delete(name: resourceName);
+      out?.writeln('Cleaned up the instance: $resourceName');
+    }
+    rethrow;
+  }
+
+  return resourceName;
+}
+
 /// The `gcloud alpha ai reasoning-engines deploy` command from [command].
 List<String> toAgentEngine(DeployCommand command) {
+  if (command.agentEngineId != null &&
+      command.agentEngineId!.trim().isNotEmpty &&
+      command.updateIfExists) {
+    throw ArgumentError(
+      'Do not pass both --agent_engine_id and --update_if_exists.',
+    );
+  }
   validateGcloudExtraArgs(command.extraArgs);
   validateServiceAccountEmail(command.serviceAccount);
   validateExtraPackages(command.extraPackages);
