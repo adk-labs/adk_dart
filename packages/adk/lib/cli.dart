@@ -20,6 +20,7 @@ export 'src/cli/api_server.dart';
 export 'src/cli/cli.dart' hide runAdkCli;
 export 'src/cli/cli_create.dart';
 export 'src/cli/cli_deploy.dart';
+export 'src/cli/http_agent_engine_runtimes_client.dart';
 export 'src/cli/cli_eval.dart';
 export 'src/cli/conformance/__init__.dart';
 export 'src/cli/deployers/__init__.dart';

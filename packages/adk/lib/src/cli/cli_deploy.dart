@@ -4,6 +4,8 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'http_agent_engine_runtimes_client.dart';
+
 /// Resolved deployment configuration used to build `gcloud` or `docker` commands.
 ///
 /// ```dart
@@ -936,10 +938,26 @@ Future<int> runDeployCommand(
   }
 
   if (options.target == DeployTarget.agentEngine) {
-    if (agentEngineClient != null && !options.dryRun) {
+    final bool shouldUseDefaultHttpClient =
+        agentEngineClient == null &&
+        !options.dryRun &&
+        options.updateIfExists &&
+        commandRunner == null &&
+        options.project.isNotEmpty &&
+        options.region.isNotEmpty;
+    final AgentEngineRuntimesClient? effectiveClient =
+        agentEngineClient ??
+        (shouldUseDefaultHttpClient
+            ? HttpAgentEngineRuntimesClient(
+                project: options.project,
+                region: options.region,
+                environment: env,
+              )
+            : null);
+    if (effectiveClient != null && !options.dryRun) {
       try {
         await deployToAgentEngine(
-          client: agentEngineClient,
+          client: effectiveClient,
           agentFolder: options.agentFolder,
           project: options.project,
           region: options.region,
@@ -960,6 +978,11 @@ Future<int> runDeployCommand(
         err.writeln('${error.message}');
         err.writeln(deployUsage);
         return 64;
+      } finally {
+        if (shouldUseDefaultHttpClient &&
+            effectiveClient is HttpAgentEngineRuntimesClient) {
+          effectiveClient.close();
+        }
       }
     }
     if (options.updateIfExists &&
