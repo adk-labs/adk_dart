@@ -859,6 +859,20 @@ Skill loadSkillFromZipBytes(List<int> zipBytes) {
   );
 }
 
+/// Loads a [Skill] from the text of a `SKILL.md` file.
+///
+/// The skill name is not compared with a directory name, since there is none.
+/// Parses YAML frontmatter between `---` lines and validates it with
+/// [Frontmatter.fromMap], attaching [resources] when provided.
+Skill loadSkillFromMarkdown(String markdown, {Resources? resources}) {
+  final _ParsedSkillMd parsed = _parseSkillMdContent(markdown);
+  return Skill(
+    frontmatter: Frontmatter.fromMap(parsed.frontmatter),
+    instructions: parsed.body,
+    resources: resources ?? Resources(),
+  );
+}
+
 /// Throws because directory-based skill loading is unsupported on Web.
 Skill loadSkillFromDir(String skillDirPath) {
   throw UnsupportedError(

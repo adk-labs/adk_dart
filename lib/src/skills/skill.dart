@@ -847,6 +847,20 @@ String formatSkillsAsXml(List<SkillDescriptor> skills) {
   return lines.join('\n');
 }
 
+/// Loads a [Skill] from the text of a `SKILL.md` file.
+///
+/// The skill name is not compared with a directory name, since there is none.
+/// Parses YAML frontmatter between `---` lines and validates it with
+/// [Frontmatter.fromMap], attaching [resources] when provided.
+Skill loadSkillFromMarkdown(String markdown, {Resources? resources}) {
+  final _ParsedSkillMd parsed = _parseSkillMdContent(markdown);
+  return Skill(
+    frontmatter: Frontmatter.fromMap(parsed.frontmatter),
+    instructions: parsed.body,
+    resources: resources ?? Resources(),
+  );
+}
+
 /// Loads a [Skill] from a directory containing `SKILL.md`.
 Skill loadSkillFromDir(String skillDirPath) {
   final Directory skillDir = _resolveSkillDir(skillDirPath);

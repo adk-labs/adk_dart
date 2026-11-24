@@ -7,6 +7,7 @@ export 'skill_runtime.dart'
         listSkillsInGcsDir,
         loadSkillFromDir,
         loadSkillFromGcsDir,
+        loadSkillFromMarkdown,
         loadSkillFromZipBytes,
         readSkillProperties,
         validateRelativeResourcePath,
