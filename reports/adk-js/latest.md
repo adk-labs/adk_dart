@@ -2,9 +2,122 @@
 
 - Date (UTC): 2026-11-24
 - Source: `google/adk-js`
-- Latest SHA: `281670ea771ee4e9a63441039bda4e676b7c3128`
+- Latest SHA: `a0522e55d450e42082e80b7ce74dcda54eb01351`
 - Previous SHA: `281670ea771ee4e9a63441039bda4e676b7c3128`
 
-## Result
+## Summary
 
-No upstream changes since the last check.
+- New commits: 13
+
+## Commits
+
+- [a0522e5](https://github.com/google/adk-js/commit/a0522e55d450e42082e80b7ce74dcda54eb01351) feat(agents): execute parallel tool calls concurrently and retain latest state writes (#1416) (adk-foundry-bot, 2026-11-24)
+- [c1181e6](https://github.com/google/adk-js/commit/c1181e600bdad84d800c5aad14bbfe529ef3d304) fix(cli): set agentFramework on Agent Engine deploys and wire eval loader flags (#1417) (adk-foundry-bot, 2026-11-24)
+- [1c4ce2b](https://github.com/google/adk-js/commit/1c4ce2b4f2e19f5d18b8ead514214b530f9488d4) fix(tools): omit null OpenAPI schema fields and map void response schemas (#1414) (adk-foundry-bot, 2026-11-24)
+- [f281c28](https://github.com/google/adk-js/commit/f281c285f40f40921243e57fe0ef0b02bb69aa19) docs(models): document live session resumption in models guide (#1390) (adk-foundry-bot, 2026-11-24)
+- [0d71971](https://github.com/google/adk-js/commit/0d71971a1fc921dca010ace7813d7222f02d9b5e) fix(plugins): guard LoggingPlugin and result classification against unserializable values (#1399) (adk-foundry-bot, 2026-11-24)
+- [c5593f8](https://github.com/google/adk-js/commit/c5593f8b9f0b3572b5b548f0593cf96d28305bca) fix(cli): honour explicit --log_level over --verbose and wire deploy --verbose (#1388) (adk-foundry-bot, 2026-11-24)
+- [8e530a8](https://github.com/google/adk-js/commit/8e530a8d5bc106b946e267eb947da94745338a63) feat(cli): add GKE deployment command and eval metric metadata endpoints (#1387) (adk-foundry-bot, 2026-11-24)
+- [0a7a185](https://github.com/google/adk-js/commit/0a7a185fb9e82976bdfe7442ed04ab5ab806e001) feat(cli): add BaseAgentLoader, AgentChangeEventHandler, and workflow state seeding (#1385) (adk-foundry-bot, 2026-11-24)
+- [866dec6](https://github.com/google/adk-js/commit/866dec605ea650c3d68b73e2e7d6ea4881d40c8a) fix(runner): process beforeRunCallback early-exit events through onEventCallback (#1384) (adk-foundry-bot, 2026-11-23)
+- [ca3189a](https://github.com/google/adk-js/commit/ca3189af12964c00c9394142397f4a57fea2414d) test(agents): cover BaseAgent name validation and agent tree lookup (#1359) (adk-foundry-bot, 2026-11-23)
+- [daa8dcc](https://github.com/google/adk-js/commit/daa8dcc6038a16863c5ba42a5ed1581e064eb104) feat(integrations): add askDataInsights tool and maxQueryResultRows config (#1357) (adk-foundry-bot, 2026-11-23)
+- [c84a617](https://github.com/google/adk-js/commit/c84a617d7c3f664bf3db98d6809a5e7bfed8dab3) feat(agents): deep-clone functionCall.args and add RunConfig.sessionResumption (#1356) (adk-foundry-bot, 2026-11-23)
+- [d831987](https://github.com/google/adk-js/commit/d831987493681105e986a464527ab7ccfbb02dcd) feat(core): expose Gemini retryOptions and return state in listSessions (#1353) (adk-foundry-bot, 2026-11-23)
+
+## Changed Files
+
+- `M	core/src/agents/functions.ts`
+- `M	core/src/agents/llm_agent.ts`
+- `M	core/src/agents/processors/basic_llm_request_processor.ts`
+- `M	core/src/agents/run_config.ts`
+- `M	core/src/cli/cli_eval.ts`
+- `M	core/src/cli/utils/evals.ts`
+- `A	core/src/cli/utils/state.ts`
+- `M	core/src/common.ts`
+- `M	core/src/index.ts`
+- `M	core/src/memory/vertex_ai_memory_bank_service.ts`
+- `M	core/src/models/apigee_llm.ts`
+- `M	core/src/models/google_llm.ts`
+- `M	core/src/plugins/_callback_helpers.ts`
+- `M	core/src/plugins/logging_plugin.ts`
+- `M	core/src/runner/runner.ts`
+- `M	core/src/sessions/in_memory_session_service.ts`
+- `M	core/src/sessions/state_write_order.ts`
+- `M	core/src/tools/base_tool.ts`
+- `M	core/src/tools/function_tool.ts`
+- `M	core/src/utils/client_labels.ts`
+- `M	core/src/utils/gemini_schema_util.ts`
+- `M	core/src/utils/simple_zod_to_json.ts`
+- `M	core/test/agents/base_agent_test.ts`
+- `M	core/test/agents/functions_test.ts`
+- `M	core/test/agents/llm_agent_test.ts`
+- `M	core/test/agents/processors/basic_llm_request_processor_test.ts`
+- `M	core/test/agents/run_config_test.ts`
+- `M	core/test/cli/cli_eval_test.ts`
+- `A	core/test/cli/utils/state_test.ts`
+- `M	core/test/memory/vertex_ai_memory_bank_service_test.ts`
+- `M	core/test/models/apigee_llm_test.ts`
+- `M	core/test/models/google_llm_test.ts`
+- `M	core/test/plugins/logging_plugin_test.ts`
+- `M	core/test/runner/run_live_test.ts`
+- `M	core/test/runner/runner_test.ts`
+- `M	core/test/sessions/in_memory_session_service_test.ts`
+- `M	core/test/tools/base_tool_test.ts`
+- `M	core/test/tools/function_tool_test.ts`
+- `M	core/test/tools/openapi_tool/auth/credential_exchangers/service_account_exchanger_test.ts`
+- `M	core/test/utils/client_labels_test.ts`
+- `M	core/test/utils/gemini_schema_util_test.ts`
+- `M	core/test/utils/simple_zod_to_json_test.ts`
+- `M	dev/src/cli/cli.ts`
+- `M	dev/src/cli/deploy/cli_deploy_agent_engine.ts`
+- `A	dev/src/cli/deploy/cli_deploy_gke.ts`
+- `M	dev/src/cli/deploy/deploy_utils.ts`
+- `M	dev/src/index.ts`
+- `M	dev/src/server/adk_api_server.ts`
+- `A	dev/src/utils/agent_change_handler.ts`
+- `M	dev/src/utils/agent_loader.ts`
+- `A	dev/src/utils/base_agent_loader.ts`
+- `M	dev/src/utils/file_utils.ts`
+- `A	dev/src/utils/shared_value.ts`
+- `M	dev/test/cli/cli_create_test.ts`
+- `M	dev/test/cli/cli_deploy_agent_engine_test.ts`
+- `M	dev/test/cli/cli_deploy_cloud_run_test.ts`
+- `A	dev/test/cli/cli_deploy_gke_test.ts`
+- `M	dev/test/cli/cli_test.ts`
+- `M	dev/test/index_test.ts`
+- `M	dev/test/server/adk_api_server_test.ts`
+- `A	dev/test/utils/agent_change_handler_test.ts`
+- `M	dev/test/utils/agent_loader_test.ts`
+- `A	dev/test/utils/base_agent_loader_test.ts`
+- `M	dev/test/utils/file_utils_test.ts`
+- `A	dev/test/utils/shared_value_test.ts`
+- `M	docs/guides/README.md`
+- `M	docs/guides/agents/index.md`
+- `M	docs/guides/cli/index.md`
+- `M	docs/guides/flows/index.md`
+- `M	docs/guides/integrations/bigquery/index.md`
+- `M	docs/guides/integrations/crewai/index.md`
+- `M	docs/guides/models/index.md`
+- `M	docs/guides/runners/index.md`
+- `M	docs/guides/tools/index.md`
+- `M	integrations/src/bigquery/bigquery_tool.ts`
+- `M	integrations/src/bigquery/bigquery_toolset.ts`
+- `M	integrations/src/bigquery/config.ts`
+- `A	integrations/src/bigquery/data_insights_tool.ts`
+- `M	integrations/src/bigquery/query_tool.ts`
+- `M	integrations/src/index.ts`
+- `A	integrations/test/bigquery/bigquery_data_insights_tool_test.ts`
+- `M	integrations/test/bigquery/bigquery_metadata_and_query_tool_test.ts`
+- `M	integrations/test/bigquery/bigquery_tool_config_test.ts`
+- `M	integrations/test/bigquery/bigquery_tool_test.ts`
+- `M	integrations/test/bigquery/bigquery_toolset_test.ts`
+- `M	samples/cli/README.md`
+- `M	samples/cli/agent.ts`
+- `M	samples/flows/README.md`
+- `M	samples/flows/agent.ts`
+- `M	samples/integrations/bigquery/README.md`
+- `M	samples/integrations/bigquery/agent.ts`
+- `A	samples/integrations/crewai/README.md`
+- `A	samples/integrations/crewai/agent.ts`
+- `M	samples/tools/agent.ts`

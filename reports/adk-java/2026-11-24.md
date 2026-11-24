@@ -2,71 +2,49 @@
 
 - Date (UTC): 2026-11-24
 - Source: `google/adk-java`
-- Latest SHA: `548d0a13bb4fd103da2a766dfb801355fc6bfcd2`
-- Previous SHA: `dde4b23de69b3ffb16393217b195bb0b056c4bb8`
+- Latest SHA: `b7dc20409fae459faf48e98eabf8f349e7597a6b`
+- Previous SHA: `548d0a13bb4fd103da2a766dfb801355fc6bfcd2`
 
 ## Summary
 
-- New commits: 10
+- New commits: 13
 
 ## Commits
 
-- [548d0a13](https://github.com/google/adk-java/commit/548d0a13bb4fd103da2a766dfb801355fc6bfcd2) feat(tokt): close and cancel a Java model's live connection without hanging or leaking (Kamil Tomaszek, 2026-11-23)
-- [ba9826cf](https://github.com/google/adk-java/commit/ba9826cf3da39c51a9b283a610fecd76909d16f1) fix(workflow): preserve a message output on events that also carry content (Mateusz Krawiec, 2026-11-23)
-- [c34785ce](https://github.com/google/adk-java/commit/c34785ce7f6502247c0d15dc3302a13696a0e6ca) fix(a2a): keep a message reply that reports only an error code (Google Team Member, 2026-11-23)
-- [e075cdf7](https://github.com/google/adk-java/commit/e075cdf7b4343ebfbd229647d12e5c39315d3ee5) fix(workflow): let a type take its own output, including keys it writes but never reads (Mateusz Krawiec, 2026-11-23)
-- [6ffdca5d](https://github.com/google/adk-java/commit/6ffdca5de5e834f872978496b8835ca7e166ac0c) refactor(workflow): add a checker that converts values to a node schema's types (Mateusz Krawiec, 2026-11-23)
-- [deb80010](https://github.com/google/adk-java/commit/deb80010de6cccd85cd67250243bd487af5da51c) feat(tokt): open a Kotlin LiveConnection on an ADK Java model (Kamil Tomaszek, 2026-11-23)
-- [cdaa3e8f](https://github.com/google/adk-java/commit/cdaa3e8fd8fa53df9b22b5fdb28944c4a43a16b4) feat(tokt): build the live request an ADK Java model connects with (Kamil Tomaszek, 2026-11-23)
-- [d910c571](https://github.com/google/adk-java/commit/d910c571d0cf063acb608274b086fcaf27d7a256) fix(workflow): rerun the model when a failed LlmAgent node retries (Damian Momot, 2026-11-23)
-- [b2572c1b](https://github.com/google/adk-java/commit/b2572c1b3955ae6950b712e865abc082403aa084) fix(workflow): make node state's map views read-only and clear() throw (Mateusz Krawiec, 2026-11-23)
-- [d9e5f860](https://github.com/google/adk-java/commit/d9e5f86016d87e766877305ca2c744321ae526b6) feat: fill in schema defaults for omitted properties (Damian Momot, 2026-11-23)
+- [b7dc2040](https://github.com/google/adk-java/commit/b7dc20409fae459faf48e98eabf8f349e7597a6b) fix(workflow): fail an agent node when a confirmed tool fails (Damian Momot, 2026-11-24)
+- [67bd999e](https://github.com/google/adk-java/commit/67bd999e5bcb0948ceffee20d74bf9769df2739c) fix(live): keep the live call up when a tool sets endOfAgent (Damian Momot, 2026-11-24)
+- [2fb48418](https://github.com/google/adk-java/commit/2fb484187b23c20061670db5fc40200dc9902909) feat(live): end a SequentialAgent step when the model calls task_completed (Damian Momot, 2026-11-24)
+- [aed10b49](https://github.com/google/adk-java/commit/aed10b49543ae342bbd9eee1fa86a16526c82f47) Merge pull request #1719 from pinqionghongbai:fix/a2a-context-id-session (Copybara-Service, 2026-11-24)
+- [2e5859d7](https://github.com/google/adk-java/commit/2e5859d735e73853f093745b65766c108b6fbee6) fix(workflow): end an agent node's turn when a FunctionTool requests confirmation (Damian Momot, 2026-11-24)
+- [d9095f54](https://github.com/google/adk-java/commit/d9095f54d9c123370c34f310033709536ba338a1) fix(models): build one final streamed response from the whole stream (Google Team Member, 2026-11-24)
+- [c817b1f7](https://github.com/google/adk-java/commit/c817b1f76c9c029d9c097e25212b3b3e3fcb7ec7) fix(dev): find tool-response traces by event id (Damian Osadczuk, 2026-11-24)
+- [9c752850](https://github.com/google/adk-java/commit/9c7528506aafd96dabf015228b3f8d611a7bec56) Merge pull request #1653 from innoprej:fix/firestore-event-order (Copybara-Service, 2026-11-24)
+- [3c689700](https://github.com/google/adk-java/commit/3c6897006c71306ee71252328a63ff7ec5ad580e) refactor(models): move Gemini stream aggregation into StreamingResponseAggregator (Google Team Member, 2026-11-24)
+- [523e6d3c](https://github.com/google/adk-java/commit/523e6d3cf9f466ba886580112acf0a5cfa592131) fix(flows): pass ReadonlyContext when resolving tools on confirmation resume (Google Team Member, 2026-11-24)
+- [22928911](https://github.com/google/adk-java/commit/229289117c9cf2789497e237201db05510ab13c8) fix(live): send each tool result once after an agent transfer (Damian Momot, 2026-11-24)
+- [983317ae](https://github.com/google/adk-java/commit/983317ae77a3c97051eb5dd2d114af81262fb06f) fix(a2a): create the session under the A2A context id (hongbailingmeng, 2026-11-08)
+- [1a6dd29e](https://github.com/google/adk-java/commit/1a6dd29e41c6f21f81b8fbef051a330afd2da6e3) fix: keep Firestore session events in time order (Jaehee Shin, 2026-10-12)
 
 ## Changed Files
 
-- `M	a2a/src/main/java/com/google/adk/a2a/converters/ResponseConverter.java`
-- `M	a2a/src/test/java/com/google/adk/a2a/converters/ResponseConverterTest.java`
-- `M	core/src/main/java/com/google/adk/SchemaUtils.java`
-- `M	core/src/main/java/com/google/adk/agents/Context.java`
-- `M	core/src/main/java/com/google/adk/agents/LlmAgent.java`
-- `M	core/src/main/java/com/google/adk/agents/SingleTurnAgentTool.java`
-- `M	core/src/main/java/com/google/adk/flows/llmflows/StepResume.java`
-- `M	core/src/main/java/com/google/adk/sessions/State.java`
-- `M	core/src/main/java/com/google/adk/tools/AgentTool.java`
-- `M	core/src/main/java/com/google/adk/tools/SetModelResponseTool.java`
-- `M	core/src/main/java/com/google/adk/workflow/FunctionNode.java`
-- `M	core/src/main/java/com/google/adk/workflow/Graph.java`
-- `M	core/src/main/java/com/google/adk/workflow/NodeInfo.java`
-- `M	core/src/main/java/com/google/adk/workflow/NodeRunner.java`
-- `M	core/src/main/java/com/google/adk/workflow/PortScalars.java`
-- `M	core/src/main/java/com/google/adk/workflow/PortSchemas.java`
-- `M	core/src/main/java/com/google/adk/workflow/ResumeScan.java`
-- `M	core/src/main/java/com/google/adk/workflow/SchemaFit.java`
-- `A	core/src/main/java/com/google/adk/workflow/ValueCoercer.java`
-- `M	core/src/test/java/com/google/adk/SchemaUtilsTest.java`
-- `M	core/src/test/java/com/google/adk/agents/ContextTest.java`
-- `M	core/src/test/java/com/google/adk/agents/LlmAgentTest.java`
-- `M	core/src/test/java/com/google/adk/flows/llmflows/StepResumeTest.java`
-- `M	core/src/test/java/com/google/adk/runner/RunnerRootNodeTest.java`
-- `M	core/src/test/java/com/google/adk/tools/AgentToolTest.java`
-- `M	core/src/test/java/com/google/adk/tools/SetModelResponseToolTest.java`
-- `M	core/src/test/java/com/google/adk/workflow/FunctionNodeTest.java`
+- `M	a2a/src/main/java/com/google/adk/a2a/executor/AgentExecutor.java`
+- `M	a2a/src/test/java/com/google/adk/a2a/executor/AgentExecutorTest.java`
+- `M	contrib/firestore-session-service/src/main/java/com/google/adk/sessions/FirestoreSessionService.java`
+- `M	contrib/firestore-session-service/src/test/java/com/google/adk/sessions/FirestoreSessionServiceTest.java`
+- `M	core/src/main/java/com/google/adk/flows/llmflows/BaseLlmFlow.java`
+- `M	core/src/main/java/com/google/adk/flows/llmflows/RequestConfirmationLlmRequestProcessor.java`
+- `A	core/src/main/java/com/google/adk/flows/llmflows/TaskCompletedTool.java`
+- `M	core/src/main/java/com/google/adk/models/Gemini.java`
+- `A	core/src/main/java/com/google/adk/models/StreamingResponseAggregator.java`
+- `M	core/src/main/java/com/google/adk/tools/FunctionTool.java`
+- `M	core/src/test/java/com/google/adk/agents/SequentialAgentTest.java`
+- `M	core/src/test/java/com/google/adk/flows/llmflows/AgentTransferTest.java`
+- `M	core/src/test/java/com/google/adk/flows/llmflows/BaseLlmFlowCancelTest.java`
+- `M	core/src/test/java/com/google/adk/flows/llmflows/EndInvocationActionTest.java`
+- `M	core/src/test/java/com/google/adk/flows/llmflows/RequestConfirmationLlmRequestProcessorTest.java`
+- `M	core/src/test/java/com/google/adk/models/GeminiTest.java`
+- `A	core/src/test/java/com/google/adk/models/StreamingResponseAggregatorTest.java`
+- `M	core/src/test/java/com/google/adk/runner/RunnerResumabilityTest.java`
 - `M	core/src/test/java/com/google/adk/workflow/LlmAgentAsNodeTest.java`
-- `M	core/src/test/java/com/google/adk/workflow/LlmAgentModeTest.java`
-- `M	core/src/test/java/com/google/adk/workflow/LlmAgentTaskModeTest.java`
-- `M	core/src/test/java/com/google/adk/workflow/ResumeScanTest.java`
-- `A	core/src/test/java/com/google/adk/workflow/ValueCoercerTest.java`
-- `M	core/src/test/java/com/google/adk/workflow/WorkflowResumeTest.java`
-- `M	core/src/test/java/com/google/adk/workflow/WorkflowResumeTesting.java`
-- `M	core/src/test/java/com/google/adk/workflow/WorkflowRetryTest.java`
-- `M	tokt/README.md`
-- `M	tokt/src/main/kotlin/com/google/adk/tokt/JavaAdkToKt.kt`
-- `A	tokt/src/main/kotlin/com/google/adk/tokt/adapters/JavaLlmConnectionToKt.kt`
-- `M	tokt/src/main/kotlin/com/google/adk/tokt/adapters/JavaModelToKt.kt`
-- `M	tokt/src/main/kotlin/com/google/adk/tokt/codecs/FunctionDeclarationCodec.kt`
-- `M	tokt/src/main/kotlin/com/google/adk/tokt/codecs/GenerateContentConfigCodec.kt`
-- `A	tokt/src/main/kotlin/com/google/adk/tokt/codecs/LiveConnectConfigCodec.kt`
-- `M	tokt/src/main/kotlin/com/google/adk/tokt/codecs/LlmRequestCodec.kt`
-- `M	tokt/src/main/kotlin/com/google/adk/tokt/codecs/PartCodec.kt`
-- `M	tokt/src/test/kotlin/com/google/adk/tokt/KtRunnerInteropTest.kt`
-- `A	tokt/src/test/kotlin/com/google/adk/tokt/adapters/JavaLlmConnectionToKtTest.kt`
+- `M	dev/src/main/java/com/google/adk/web/service/ApiServerSpanExporter.java`
+- `M	dev/src/test/java/com/google/adk/web/service/ApiServerSpanExporterTest.java`

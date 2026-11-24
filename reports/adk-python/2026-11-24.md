@@ -2,93 +2,108 @@
 
 - Date (UTC): 2026-11-24
 - Source: `google/adk-python`
-- Latest SHA: `84cb0742bcd5921efc585dff7c1ae86063702f81`
-- Previous SHA: `2b90353cd2f1ee0a8a52262a7843333b6f7d2c8d`
+- Latest SHA: `825a44c5dfb72cd14d5d037a8f42a27c7bf62292`
+- Previous SHA: `84cb0742bcd5921efc585dff7c1ae86063702f81`
 
 ## Summary
 
-- New commits: 11
+- New commits: 6
 
 ## Commits
 
-- [84cb0742](https://github.com/google/adk-python/commit/84cb0742bcd5921efc585dff7c1ae86063702f81) feat(cli): warn on duplicate Agent Engine display name and add --update_if_exists (Google Team Member, 2026-11-23)
-- [b4ae4fb8](https://github.com/google/adk-python/commit/b4ae4fb8dde4fb45644b0a02a455a9ab94b14df0) feat(classifiers): add GeminiDecisionsClassifier for the Gemini Decisions API (Kathy Wu, 2026-11-23)
-- [9c22a89f](https://github.com/google/adk-python/commit/9c22a89fe2d212a0672ea0bdfcc155ac8d361b5e) fix: track transient instructions and gate dynamic instruction routing (George Weale, 2026-11-23)
-- [8c0d2f88](https://github.com/google/adk-python/commit/8c0d2f88064dc4f4661a02accb01fe4fb6c25efa) fix(telemetry): Record a Gemini inference once when the google-genai instrumentor is installed (Max Ind, 2026-11-23)
-- [d2a60a21](https://github.com/google/adk-python/commit/d2a60a21d4786791665dab728d26334b409ceea6) refactor(a2a): use X | None, X | Y, and builtin generics in type hints (Yuhan Gao, 2026-11-23)
-- [17c4a10a](https://github.com/google/adk-python/commit/17c4a10afb604e11f92ca04c99d1cab6a90cd6cb) fix: copy the request config and tools when screening live user input (Jason Zhang, 2026-11-23)
-- [163bfc06](https://github.com/google/adk-python/commit/163bfc0681fde974bb58d4f1d5274697d574bb34) fix: allow google-genai 3 (George Weale, 2026-11-23)
-- [6686413c](https://github.com/google/adk-python/commit/6686413c26490e67c7200d4908e6cea6ff995aad) feat(skills): add load_skill_from_markdown to build a skill from SKILL.md text (George Weale, 2026-11-23)
-- [7ed9cb5d](https://github.com/google/adk-python/commit/7ed9cb5d774979b4f9ea13994631b5ea66d2f6a5) ci: remove the PR triage GitHub workflow (George Weale, 2026-11-23)
-- [4d9e2c75](https://github.com/google/adk-python/commit/4d9e2c75f92305b335f8e66f8b4a8ea99f13017f) fix(artifacts): tighten S3 metadata checks in FsspecArtifactService (Google Team Member, 2026-11-22)
-- [481e1b2f](https://github.com/google/adk-python/commit/481e1b2f15440743a61ccf36bcbcdba12d5949be) feat(artifacts): support artifact metadata on Azure in FsspecArtifactService (Google Team Member, 2026-11-22)
+- [825a44c5](https://github.com/google/adk-python/commit/825a44c5dfb72cd14d5d037a8f42a27c7bf62292) perf(telemetry): skip serializing request history when content capture is off (Afonso Ribeiro, 2026-11-24)
+- [50961696](https://github.com/google/adk-python/commit/50961696a49750c1bff354c9406c455778c2a166) fix(a2a): propagate CancelledError raised inside runner.run_async (Google Team Member, 2026-11-24)
+- [1c384506](https://github.com/google/adk-python/commit/1c384506e08bb808f3eab2d82f6c26f2d65b773e) fix(models): handle Claude sampling settings on anthropic 1.x and 2.x (George Weale, 2026-11-24)
+- [8d064dc9](https://github.com/google/adk-python/commit/8d064dc91612805805fd8e2e281c8b86f503e37f) feat(telemetry): record gen_ai.client.inference.duration (Google Team Member, 2026-11-24)
+- [e3dbdc17](https://github.com/google/adk-python/commit/e3dbdc1726bed0bfc3d2e3f335fc7c0dcdf6b9c5) fix(plugins): keep secret_key and passwd args out of tracing spans (John B Joseph, 2026-11-24)
+- [54fc37e5](https://github.com/google/adk-python/commit/54fc37e5fab77f2cfc02fd02f8e6019d288d3920) chore(features): reject new imports of google.adk.a2a.experimental (Xuan Yang, 2026-11-23)
 
 ## Changed Files
 
-- `M	.github/workflows/continuous-integration.yml`
-- `D	.github/workflows/pr-triage.yml`
-- `M	contributing/samples/adk_team/adk_pr_triaging_agent/README.md`
-- `M	docs/guides/README.md`
-- `M	docs/guides/flows/llm_flows/base_llm_flow/live_model_callbacks.md`
-- `A	docs/guides/labs/classifiers/gemini_decisions_classifier/index.md`
-- `M	docs/guides/skills/skill/index.md`
-- `M	pyproject.toml`
-- `M	src/google/adk/a2a/_compat.py`
-- `M	src/google/adk/a2a/agent/_remote_a2a_agent.py`
-- `M	src/google/adk/a2a/agent/interceptors/new_integration_extension.py`
-- `M	src/google/adk/a2a/agent/utils.py`
-- `M	src/google/adk/a2a/converters/event_converter.py`
-- `M	src/google/adk/a2a/converters/from_adk_event.py`
-- `M	src/google/adk/a2a/converters/part_converter.py`
-- `M	src/google/adk/a2a/converters/request_converter.py`
-- `M	src/google/adk/a2a/converters/to_adk_event.py`
-- `M	src/google/adk/a2a/executor/config.py`
-- `M	src/google/adk/a2a/executor/interceptors/include_artifacts_in_a2a_event.py`
+- `M	docs/guides/features/feature_registry/index.md`
+- `M	scripts/compliance_checks.py`
 - `M	src/google/adk/a2a/executor/utils.py`
-- `M	src/google/adk/a2a/utils/agent_card_builder.py`
-- `M	src/google/adk/cli/cli_deploy.py`
-- `M	src/google/adk/cli/cli_tools_click.py`
-- `M	src/google/adk/flows/llm_flows/basic.py`
-- `M	src/google/adk/flows/llm_flows/core/_utils.py`
-- `M	src/google/adk/flows/llm_flows/prompt/_dynamic_instructions.py`
-- `M	src/google/adk/integrations/fsspec/_backends.py`
-- `M	src/google/adk/integrations/fsspec/_fsspec_artifact_service.py`
-- `M	src/google/adk/integrations/model_armor/_plugin.py`
-- `M	src/google/adk/labs/classifiers/__init__.py`
-- `A	src/google/adk/labs/classifiers/_gemini_decisions_classifier.py`
-- `M	src/google/adk/live/_cascade_live.py`
-- `M	src/google/adk/live/_live_llm_flow.py`
-- `M	src/google/adk/models/_fallback_model.py`
 - `M	src/google/adk/models/anthropic_llm.py`
-- `M	src/google/adk/models/base_llm.py`
-- `M	src/google/adk/models/google_llm.py`
-- `M	src/google/adk/models/lite_llm.py`
-- `M	src/google/adk/models/llm_request.py`
-- `M	src/google/adk/plugins/context_filter_plugin.py`
-- `M	src/google/adk/plugins/multimodal_tool_results_plugin.py`
-- `M	src/google/adk/skills/__init__.py`
-- `M	src/google/adk/skills/_utils.py`
-- `M	src/google/adk/telemetry/_genai_instrumentor.py`
+- `M	src/google/adk/telemetry/_experimental_semconv.py`
+- `M	src/google/adk/telemetry/_instrumentation.py`
+- `M	src/google/adk/telemetry/_metrics.py`
 - `M	src/google/adk/telemetry/tracing.py`
-- `M	tests/unittests/a2a/converters/test_event_round_trip.py`
-- `M	tests/unittests/a2a/integration/client.py`
-- `M	tests/unittests/artifacts/test_artifact_service.py`
-- `M	tests/unittests/cli/utils/test_cli_deploy.py`
-- `M	tests/unittests/flows/llm_flows/test_base_llm_flow.py`
-- `M	tests/unittests/integrations/fsspec/test_fsspec_artifact_service.py`
-- `M	tests/unittests/integrations/model_armor/test_model_armor_plugin.py`
-- `A	tests/unittests/labs/classifiers/test_gemini_decisions_classifier.py`
-- `M	tests/unittests/live/test_cascade_live.py`
-- `M	tests/unittests/live/test_live_llm_flow.py`
+- `M	src/google/adk/utils/_credential_names.py`
+- `M	tests/unittests/a2a/executor/test_a2a_agent_executor.py`
+- `M	tests/unittests/a2a/executor/test_a2a_agent_executor_impl.py`
 - `M	tests/unittests/models/test_anthropic_llm.py`
-- `M	tests/unittests/models/test_fallback_model.py`
-- `M	tests/unittests/models/test_google_llm.py`
-- `M	tests/unittests/models/test_litellm.py`
-- `M	tests/unittests/models/test_llm_request.py`
-- `M	tests/unittests/plugins/test_context_filtering_plugin.py`
-- `M	tests/unittests/plugins/test_multimodal_tool_results_plugin.py`
-- `M	tests/unittests/skills/test__utils.py`
-- `M	tests/unittests/telemetry/test_functional.py`
-- `M	tests/unittests/telemetry/test_genai_instrumentor_bypass.py`
-- `M	tests/unittests/telemetry/test_smoke.py`
-- `M	tests/unittests/tools/model_consult/test_advisor.py`
+- `M	tests/unittests/plugins/test_auto_tracing_plugin.py`
+- `M	tests/unittests/scripts/test_compliance_checks.py`
+- `M	tests/unittests/telemetry/functional/scenarios/telemetry_setup.py`
+- `M	tests/unittests/telemetry/functional_divergences.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-event-only-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-event-only-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-no-content-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-no-content-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-span-and-event-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-span-and-event-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-span-only-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-span-only-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-telemetry-no-capture-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-telemetry-no-capture-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/grounding.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/inference-error-resource-exhausted-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/inference-error-resource-exhausted-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/inference-error-valueerror-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/inference-error-valueerror-span-and-event-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/stable-capture-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/stable-no-capture-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/tool-error-valueerror-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/tool-error-valueerror-span-only-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent_tool/experimental-telemetry-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent_tool/experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent_tool/no-experimental-telemetry-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent_tool/no-experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/conversational_agent_compaction/no-experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/conversational_agent_compaction/sliding-window-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/conversational_agent_compaction/token-threshold-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/conversational_agent_compaction/untriggered-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/mcp/experimental-span-and-event.json`
+- `M	tests/unittests/telemetry/functional_goldens/mcp/http-exchange.json`
+- `M	tests/unittests/telemetry/functional_goldens/multi_agent/experimental-telemetry-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/multi_agent/experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/multi_agent/no-experimental-telemetry-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/multi_agent/no-experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/nested_agents_in_workflow/experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/nested_agents_in_workflow/no-experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-event-only-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-event-only-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-no-content-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-no-content-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-span-and-event-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-span-and-event-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-span-only-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-span-only-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/stable-capture-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/stable-no-capture-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/invalid-skill-resource-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/invalid-skill-resource-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/invalid-skill-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/skill-resource-telemetry-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/skill-resource-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/skill-script-telemetry-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/skill-script-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/skill-telemetry-disabled-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/skill-telemetry-disabled-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/skill-telemetry-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/skill-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-event-only-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-event-only-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-no-content-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-no-content-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-span-and-event-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-span-and-event-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-span-only-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-span-only-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/stable-capture-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/stable-no-capture-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/workflow_compaction/sliding-window-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/workflow_compaction/sliding-window-schema-v2.json`
+- `M	tests/unittests/telemetry/test_experimental_semconv.py`
+- `M	tests/unittests/telemetry/test_semconv_conformance.py`
+- `M	tests/unittests/telemetry/test_serialization.py`

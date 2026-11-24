@@ -2,8 +2,8 @@
 
 - Date (UTC): 2026-11-24
 - Source: `google/adk-go`
-- Latest SHA: `57c6bd80dc6a981e2db426fecb33adc139e509ac`
-- Previous SHA: `3f5d74d36e3f5c734904516bc83fd1b8556722dc`
+- Latest SHA: `e52983b4b9d29d873e061e52e10ff391135feced`
+- Previous SHA: `57c6bd80dc6a981e2db426fecb33adc139e509ac`
 
 ## Summary
 
@@ -11,23 +11,32 @@
 
 ## Commits
 
-- [57c6bd8](https://github.com/google/adk-go/commit/57c6bd80dc6a981e2db426fecb33adc139e509ac) fix(adkrest): reject runtime-only fields in create-session events (#1995) (João Westerberg, 2026-11-23)
-- [8b338c2](https://github.com/google/adk-go/commit/8b338c2e7569be4d3a07f544efe0597cd6f43a59) fix(loadartifactstool): attach artifacts from every parallel call (#2417) (ktsoator, 2026-11-23)
-- [366f608](https://github.com/google/adk-go/commit/366f608bfb7b88bd4eba232be0d87ee7c82c03c5) fix(preloadmemorytool): exclude thought parts from memory queries (#1852) (ktsoator, 2026-11-23)
-- [f779980](https://github.com/google/adk-go/commit/f77998059feaaa053b64c3a650106067b452d162) fix(agentanalytics): require adk/v2 v2.8.0 and patched klauspost/compress (#2477) (Jan Wojtas, 2026-11-23)
-- [a5af272](https://github.com/google/adk-go/commit/a5af27267d35cc97dda82de4d3ba50502533206d) chore(deps): bump the go-minor-patch group with 3 updates (#2469) (dependabot[bot], 2026-11-23)
+- [e52983b](https://github.com/google/adk-go/commit/e52983b4b9d29d873e061e52e10ff391135feced) fix(workflow): preserve array order in schema literal values (#2465) (噜噜, 2026-11-25)
+- [29465f6](https://github.com/google/adk-go/commit/29465f6d392a6775079447b66f0c11cc03f890a6) feat(model/gemini): trace context cache actions and failures (#2419) (wolo, 2026-11-24)
+- [ed17582](https://github.com/google/adk-go/commit/ed1758224eea3315507619446f3fc79e6d5ac25a) fix(anthropic): update default model configuration (#2486) (indurireddy-TF, 2026-11-24)
+- [fea9549](https://github.com/google/adk-go/commit/fea95495a9f55d13536e03e0230f247c63e10adb) feat(adkrest): list artifact versions over REST (#2473) (ktsoator, 2026-11-24)
+- [754138b](https://github.com/google/adk-go/commit/754138be96daa9a6d51d6e152e99ba56c889f7cf) fix(agentregistry): authenticate MCP egress only to Google API hosts (#2476) (wolo, 2026-11-24)
 
 ## Changed Files
 
-- `M	go.mod`
-- `M	go.sum`
-- `M	internal/llminternal/auth_preprocessor.go`
-- `M	plugin/agentanalytics/go.mod`
-- `M	plugin/agentanalytics/go.sum`
-- `M	server/adkrest/controllers/sessions.go`
-- `M	server/adkrest/controllers/sessions_test.go`
-- `M	server/adkrest/sessions_integration_test.go`
-- `M	tool/loadartifactstool/load_artifacts_tool.go`
-- `M	tool/loadartifactstool/load_artifacts_tool_test.go`
-- `M	tool/preloadmemorytool/tool.go`
-- `M	tool/preloadmemorytool/tool_test.go`
+- `M	agentregistry/factory.go`
+- `M	agentregistry/factory_test.go`
+- `M	examples/anthropic/README.md`
+- `M	examples/anthropic/main.go`
+- `M	examples/contextcache/README.md`
+- `A	internal/telemetry/context_cache.go`
+- `M	internal/utils/schema_canonical.go`
+- `M	internal/utils/schema_canonical_test.go`
+- `M	model/anthropicmodel/doc.go`
+- `M	model/cache.go`
+- `M	model/gemini/context_cache.go`
+- `A	model/gemini/context_cache_telemetry_test.go`
+- `M	model/gemini/context_cache_test.go`
+- `M	model/gemini/gemini.go`
+- `A	runner/context_cache_telemetry_test.go`
+- `M	runner/context_cache_test.go`
+- `A	server/adkrest/artifact_versions_integration_test.go`
+- `M	server/adkrest/controllers/artifacts.go`
+- `M	server/adkrest/controllers/artifacts_test.go`
+- `M	server/adkrest/internal/routers/artifacts.go`
+- `M	workflow/validation_test.go`
