@@ -1,6 +1,7 @@
 /// Per-backend object creation and metadata reads for [FsspecArtifactService].
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'fsspec_artifact_service.dart';
@@ -392,14 +393,14 @@ abstract class FsspecBackendAdapter {
   }
 
   /// Reads and normalizes metadata for a single file object at [key].
-  FsspecObjectMetadata? readMetadata(String key) {
+  Future<FsspecObjectMetadata?> readMetadata(String key) async {
     fs.invalidateCache(key);
     try {
-      final Map<String, Object?> info = fs.info(key);
+      final Map<String, Object?> info = await fs.info(key);
       if ((info['type'] ?? 'file') != 'file') {
         return null;
       }
-      return fromInfo(key, info);
+      return await fromInfoAsync(key, info);
     } catch (error) {
       if (_isAdapterMissingError(error)) {
         return null;
@@ -429,25 +430,36 @@ abstract class FsspecBackendAdapter {
     );
   }
 
+  /// Asynchronously normalizes an `info()` / `find(detail: true)` map for
+  /// [key]. Defaults to [fromInfo].
+  Future<FsspecObjectMetadata> fromInfoAsync(
+    String key,
+    Map<String, Object?> info,
+  ) async {
+    return fromInfo(key, info);
+  }
+
   /// Returns `find(detail: true)` entries for objects under [prefix].
-  Object findDetail(String prefix) {
-    return fs.find(prefix, detail: true);
+  Future<Object> findDetail(String prefix) async {
+    return await fs.find(prefix, detail: true);
   }
 
   /// Normalizes `find(detail: true)` entries, keyed by object path.
-  Map<String, FsspecObjectMetadata> readListingMetadata(
+  Future<Map<String, FsspecObjectMetadata>> readListingMetadata(
     Map<String, Map<String, Object?>> entries,
-  ) {
-    return <String, FsspecObjectMetadata>{
-      for (final MapEntry<String, Map<String, Object?>> entry
-          in entries.entries)
-        entry.key: fromInfo(entry.key, entry.value),
-    };
+  ) async {
+    final Map<String, FsspecObjectMetadata> result =
+        <String, FsspecObjectMetadata>{};
+    for (final MapEntry<String, Map<String, Object?>> entry
+        in entries.entries) {
+      result[entry.key] = await fromInfoAsync(entry.key, entry.value);
+    }
+    return result;
   }
 
   /// Creates the version object [key], failing with [FsspecFileExistsException]
   /// if it already exists.
-  void createObject(
+  Future<void> createObject(
     String key,
     List<int> data, {
     String? contentType,
@@ -472,21 +484,21 @@ class GcsBackendAdapter extends FsspecBackendAdapter {
     return bucketType != null && bucketType.endsWith('ZONAL_HIERARCHICAL');
   }
 
-  void _removeFailedVersion(String key) {
+  Future<void> _removeFailedVersion(String key) async {
     try {
-      fs.rmFile(key);
+      await fs.rmFile(key);
     } catch (_) {
       // Best-effort cleanup; preserve original write error for the caller.
     }
     fs.invalidateCache(key);
   }
 
-  void _writeRapid(
+  Future<void> _writeRapid(
     String key,
     List<int> data,
     String? contentType,
     Map<String, String> metadata,
-  ) {
+  ) async {
     final List<String> reserved =
         metadata.keys.where(_rapidSetxattrsReservedKeys.contains).toList()
           ..sort();
@@ -506,7 +518,7 @@ class GcsBackendAdapter extends FsspecBackendAdapter {
       if (data.isNotEmpty) {
         stream.write(data);
       }
-      stream.close();
+      await stream.close();
     } catch (exc) {
       stream.closed = true;
       final String excName = exc.runtimeType.toString();
@@ -515,34 +527,34 @@ class GcsBackendAdapter extends FsspecBackendAdapter {
         throw FsspecFileExistsException(key, cause: exc);
       }
       if (stream.aaow != null) {
-        _removeFailedVersion(key);
+        await _removeFailedVersion(key);
       }
       rethrow;
     }
     try {
-      fs.setxattrs(
+      await fs.setxattrs(
         key,
         contentType: contentType ?? _defaultMimeType,
         metadata: metadata,
       );
     } catch (_) {
-      _removeFailedVersion(key);
+      await _removeFailedVersion(key);
       rethrow;
     }
   }
 
   @override
-  void createObject(
+  Future<void> createObject(
     String key,
     List<int> data, {
     String? contentType,
     Map<String, String> metadata = const <String, String>{},
-  }) {
+  }) async {
     if (_isRapidBucket(key)) {
-      _writeRapid(key, data, contentType, metadata);
+      await _writeRapid(key, data, contentType, metadata);
       return;
     }
-    fs.pipeFile(
+    await fs.pipeFile(
       key,
       data,
       mode: 'create',
@@ -567,10 +579,11 @@ class S3BackendAdapter extends FsspecBackendAdapter {
   @override
   bool get storesCustomMetadata => true;
 
-  @override
-  FsspecObjectMetadata fromInfo(String key, Map<String, Object?> info) {
+  FsspecObjectMetadata _buildMetadata(
+    Map<String, String> s3Metadata,
+    Map<String, Object?> info,
+  ) {
     final Map<String, Object?> rawMetadata = <String, Object?>{};
-    final Map<String, String> s3Metadata = fs.metadata(key);
     s3Metadata.forEach((String s3Key, String value) {
       final String name = _s3InternalMetadataKeys[s3Key] ?? s3Key;
       final String decoded = internalMetadataKeys.contains(name)
@@ -591,13 +604,34 @@ class S3BackendAdapter extends FsspecBackendAdapter {
   }
 
   @override
-  Map<String, FsspecObjectMetadata> readListingMetadata(
+  FsspecObjectMetadata fromInfo(String key, Map<String, Object?> info) {
+    final FutureOr<Map<String, String>> rawS3Metadata = fs.metadata(key);
+    if (rawS3Metadata is Future<Map<String, String>>) {
+      throw StateError(
+        'S3BackendAdapter.fromInfo called synchronously on an async '
+        'FilesystemProtocol; use fromInfoAsync instead.',
+      );
+    }
+    return _buildMetadata(rawS3Metadata, info);
+  }
+
+  @override
+  Future<FsspecObjectMetadata> fromInfoAsync(
+    String key,
+    Map<String, Object?> info,
+  ) async {
+    final Map<String, String> s3Metadata = await fs.metadata(key);
+    return _buildMetadata(s3Metadata, info);
+  }
+
+  @override
+  Future<Map<String, FsspecObjectMetadata>> readListingMetadata(
     Map<String, Map<String, Object?>> entries,
-  ) {
+  ) async {
     final Map<String, FsspecObjectMetadata> result =
         <String, FsspecObjectMetadata>{};
     for (final String key in entries.keys) {
-      final FsspecObjectMetadata? meta = readMetadata(key);
+      final FsspecObjectMetadata? meta = await readMetadata(key);
       if (meta != null) {
         result[key] = meta;
       }
@@ -606,12 +640,12 @@ class S3BackendAdapter extends FsspecBackendAdapter {
   }
 
   @override
-  void createObject(
+  Future<void> createObject(
     String key,
     List<int> data, {
     String? contentType,
     Map<String, String> metadata = const <String, String>{},
-  }) {
+  }) async {
     final Map<String, String>? encoded = metadata.isEmpty
         ? null
         : _encodeAsciiMetadata(
@@ -628,7 +662,7 @@ class S3BackendAdapter extends FsspecBackendAdapter {
         ? contentType
         : _defaultMimeType;
     try {
-      fs.pipeFile(
+      await fs.pipeFile(
         key,
         data,
         mode: 'create',
@@ -675,7 +709,7 @@ class AzureBackendAdapter extends FsspecBackendAdapter {
   bool get storesCustomMetadata => true;
 
   @override
-  FsspecObjectMetadata? readMetadata(String key) {
+  Future<FsspecObjectMetadata?> readMetadata(String key) async {
     // adlfs invalidateCache(key) keeps a cached parent listing, which info()
     // would trust and report key as missing.
     fs.invalidateCache(fs.parent(key));
@@ -683,14 +717,14 @@ class AzureBackendAdapter extends FsspecBackendAdapter {
   }
 
   @override
-  Object findDetail(String prefix) {
+  Future<Object> findDetail(String prefix) async {
     // adlfs find(path) returns [path] when path is itself a blob, which a flat
     // namespace allows next to blobs below it (a/0 and a/0/0). Listing from
     // the container with prefix= skips that check.
     final int slash = prefix.indexOf('/');
     final String container = slash >= 0 ? prefix.substring(0, slash) : prefix;
     final String path = slash >= 0 ? prefix.substring(slash + 1) : '';
-    return fs.find(container, prefix: path, detail: true);
+    return await fs.find(container, prefix: path, detail: true);
   }
 
   @override
@@ -751,12 +785,12 @@ class AzureBackendAdapter extends FsspecBackendAdapter {
   }
 
   @override
-  void createObject(
+  Future<void> createObject(
     String key,
     List<int> data, {
     String? contentType,
     Map<String, String> metadata = const <String, String>{},
-  }) {
+  }) async {
     if (_dropsContentType) {
       throw FsspecImportError(
         'Saving artifacts on Azure needs adlfs 2026.8.0 or newer. Upgrade it '
@@ -782,7 +816,7 @@ class AzureBackendAdapter extends FsspecBackendAdapter {
     );
     try {
       stream.write(data);
-      stream.close();
+      await stream.close();
     } catch (exc) {
       // Keep finalizers from calling close() and committing a failed write.
       stream.closed = true;
@@ -804,16 +838,16 @@ class GenericBackendAdapter extends FsspecBackendAdapter {
   GenericBackendAdapter(super.fs, {super.clock});
 
   @override
-  void createObject(
+  Future<void> createObject(
     String key,
     List<int> data, {
     String? contentType,
     Map<String, String> metadata = const <String, String>{},
-  }) {
+  }) async {
     if (!fs.autoMkdir) {
       final int slash = key.lastIndexOf('/');
       if (slash > 0) {
-        fs.makedirs(key.substring(0, slash), existOk: true);
+        await fs.makedirs(key.substring(0, slash), existOk: true);
       }
     }
     final Set<String> protocols = _adapterFsProtocols(fs).toSet();
@@ -823,13 +857,13 @@ class GenericBackendAdapter extends FsspecBackendAdapter {
         if (data.isNotEmpty) {
           stream.write(data);
         }
-        stream.close();
+        await stream.close();
       } catch (_) {
-        stream.close();
+        await stream.close();
         rethrow;
       }
     } else {
-      fs.pipeFile(key, data, mode: 'create');
+      await fs.pipeFile(key, data, mode: 'create');
     }
   }
 }

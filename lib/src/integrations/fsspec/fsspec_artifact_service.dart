@@ -1,6 +1,7 @@
 /// Artifact service backed by an fsspec-compatible filesystem.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -11,6 +12,7 @@ import '../../features/_feature_decorator.dart';
 import '../../features/_feature_registry.dart';
 import '../../types/content.dart';
 import 'backends.dart';
+import 'cloud_filesystems.dart';
 
 const String _userNamespacePrefix = 'user:';
 const String _userNamespaceSegment = 'user';
@@ -121,6 +123,19 @@ class FsspecFileExistsException extends FileSystemException {
   final Object? cause;
 }
 
+/// Exception thrown when an fsspec backend cannot find the requested path.
+class FsspecFileNotFoundException extends FileSystemException {
+  /// Creates an [FsspecFileNotFoundException] for [path].
+  FsspecFileNotFoundException(
+    String path, {
+    String message = 'File not found',
+    this.cause,
+  }) : super(message, path, const OSError('File not found', 2));
+
+  /// Optional underlying backend exception.
+  final Object? cause;
+}
+
 /// Exception thrown when an fsspec backend rejects an operation due to
 /// insufficient permissions.
 class FsspecPermissionException extends FileSystemException {
@@ -157,7 +172,7 @@ abstract class FsspecWriteStream {
   void write(List<int> bytes);
 
   /// Flushes and finalizes the stream.
-  void close();
+  FutureOr<void> close();
 }
 
 /// Resolver signature matching `fsspec.core.url_to_fs`.
@@ -527,7 +542,7 @@ abstract class FilesystemProtocol {
   /// When [detail] is `true`, returns a `Map<String, Map<String, Object?>>`
   /// mapping each entry path to its metadata dictionary (or a `List<String>`).
   /// Optional [prefix] restricts matches to entries under `[path]/[prefix]`.
-  Object find(
+  FutureOr<Object> find(
     String path, {
     int? maxdepth,
     bool withdirs = false,
@@ -538,18 +553,31 @@ abstract class FilesystemProtocol {
   /// Returns metadata dictionary for [path].
   ///
   /// Throws a [FileSystemException] when [path] does not exist.
-  Map<String, Object?> info(String path);
+  FutureOr<Map<String, Object?>> info(String path);
+
+  /// Returns whether [path] exists in this filesystem.
+  FutureOr<bool> exists(String path) async {
+    try {
+      await info(path);
+      return true;
+    } catch (error) {
+      if (_isMissingError(error)) {
+        return false;
+      }
+      rethrow;
+    }
+  }
 
   /// Reads and returns the raw bytes of the file at [path].
   ///
   /// Throws a [FileSystemException] when [path] does not exist.
-  List<int> catFile(String path);
+  FutureOr<List<int>> catFile(String path);
 
   /// Writes [data] to [path].
   ///
   /// When [mode] is `'create'`, throws [FsspecFileExistsException] (or
   /// [PathExistsException]) if [path] already exists.
-  void pipeFile(
+  FutureOr<void> pipeFile(
     String path,
     List<int> data, {
     String mode = 'overwrite',
@@ -572,16 +600,38 @@ abstract class FilesystemProtocol {
   }
 
   /// Removes the single file at [path].
-  void rmFile(String path) {
+  FutureOr<void> rmFile(String path) {
     throw UnsupportedError('rmFile is not supported by $runtimeType.');
   }
 
+  /// Removes [path], optionally recursively when [recursive] is `true`.
+  FutureOr<void> rm(String path, {bool recursive = false}) async {
+    if (!recursive) {
+      await rmFile(path);
+      return;
+    }
+    final Object found = await find(path);
+    if (found is List) {
+      for (final Object? item in found) {
+        if (item is String) {
+          try {
+            await rmFile(item);
+          } catch (error) {
+            if (!_isMissingError(error)) {
+              rethrow;
+            }
+          }
+        }
+      }
+    }
+  }
+
   /// Creates [path] and its parent directories if needed.
-  void makedirs(String path, {bool existOk = false}) {}
+  FutureOr<void> makedirs(String path, {bool existOk = false}) {}
 
   /// Updates extended attributes (`contentType` and custom `metadata`) on an
   /// existing object at [path].
-  void setxattrs(
+  FutureOr<void> setxattrs(
     String path, {
     String? contentType,
     Map<String, String>? metadata,
@@ -598,7 +648,8 @@ abstract class FilesystemProtocol {
 
   /// Returns user metadata for [path] (used by S3 / `s3fs` backends whose
   /// `info()` and listings omit user metadata).
-  Map<String, String> metadata(String path) => const <String, String>{};
+  FutureOr<Map<String, String>> metadata(String path) =>
+      const <String, String>{};
 }
 
 class _InMemoryWriteStream extends FsspecWriteStream {
@@ -1280,6 +1331,23 @@ final Map<String, InMemoryFsspecFilesystem> _sharedMemoryFilesystems =
     );
     return (fs, fs.stripProtocol(url));
   }
+  if (scheme == 'gs' || scheme == 'gcs') {
+    final GcsFsspecFilesystem fs = GcsFsspecFilesystem.fromStorageOptions(
+      storageOptions,
+    );
+    return (fs, fs.stripProtocol(url));
+  }
+  if (scheme == 's3' || scheme == 's3a') {
+    final S3FsspecFilesystem fs = S3FsspecFilesystem.fromStorageOptions(
+      storageOptions,
+    );
+    return (fs, fs.stripProtocol(url));
+  }
+  if (scheme == 'abfs' || scheme == 'abfss' || scheme == 'az') {
+    final AzureBlobFsspecFilesystem fs =
+        AzureBlobFsspecFilesystem.fromStorageOptions(storageOptions);
+    return (fs, fs.stripProtocol(url));
+  }
   final InMemoryFsspecFilesystem fs = InMemoryFsspecFilesystem(
     protocol: scheme,
   );
@@ -1449,13 +1517,13 @@ class FsspecArtifactService extends BaseArtifactService {
     return '$scope/$filename';
   }
 
-  Map<String, Map<String, Object?>> _findDetail(String path) {
+  Future<Map<String, Map<String, Object?>>> _findDetail(String path) async {
     final String strippedBase = _fs.stripProtocol(path);
     final String prefix = strippedBase == '/' ? '/' : '$strippedBase/';
     _fs.invalidateCache(path);
     Object detail;
     try {
-      detail = _backend.findDetail(prefix);
+      detail = await _backend.findDetail(prefix);
     } catch (error) {
       if (_isMissingError(error)) {
         return <String, Map<String, Object?>>{};
@@ -1496,7 +1564,7 @@ class FsspecArtifactService extends BaseArtifactService {
     String? sessionId,
     Map<String, Object?>? customMetadata,
   }) async {
-    return _saveArtifactSync(
+    return _saveArtifact(
       appName: appName,
       userId: userId,
       sessionId: sessionId,
@@ -1506,14 +1574,14 @@ class FsspecArtifactService extends BaseArtifactService {
     );
   }
 
-  int _saveArtifactSync({
+  Future<int> _saveArtifact({
     required String appName,
     required String userId,
     required String? sessionId,
     required String filename,
     required Part artifact,
     required Map<String, Object?>? customMetadata,
-  }) {
+  }) async {
     final String artifactPath = _artifactPath(
       appName,
       userId,
@@ -1599,14 +1667,14 @@ class FsspecArtifactService extends BaseArtifactService {
       );
     }
 
-    final List<int> versions = _versionsUnder(artifactPath);
+    final List<int> versions = await _versionsUnder(artifactPath);
     int version = versions.isEmpty ? 0 : versions.last + 1;
 
     int attemptsLeft = _maxSaveVersionAttempts;
     while (true) {
       final String key = '$artifactPath/$version';
       try {
-        _backend.createObject(
+        await _backend.createObject(
           key,
           data,
           contentType: contentType,
@@ -1637,7 +1705,7 @@ class FsspecArtifactService extends BaseArtifactService {
     String? sessionId,
     int? version,
   }) async {
-    return _loadArtifactSync(
+    return _loadArtifact(
       appName: appName,
       userId: userId,
       sessionId: sessionId,
@@ -1646,14 +1714,14 @@ class FsspecArtifactService extends BaseArtifactService {
     );
   }
 
-  Part? _loadArtifactSync({
+  Future<Part?> _loadArtifact({
     required String appName,
     required String userId,
     required String? sessionId,
     required String filename,
     required int? version,
     int maxDepth = _maxArtifactReferenceDepth,
-  }) {
+  }) async {
     final String artifactPath = _artifactPath(
       appName,
       userId,
@@ -1662,7 +1730,7 @@ class FsspecArtifactService extends BaseArtifactService {
     );
     int resolvedVersion;
     if (version == null) {
-      final List<int> versions = _versionsUnder(artifactPath);
+      final List<int> versions = await _versionsUnder(artifactPath);
       if (versions.isEmpty) {
         return null;
       }
@@ -1674,7 +1742,9 @@ class FsspecArtifactService extends BaseArtifactService {
     }
     final String key = '$artifactPath/$resolvedVersion';
 
-    final FsspecObjectMetadata? objectMetadata = _backend.readMetadata(key);
+    final FsspecObjectMetadata? objectMetadata = await _backend.readMetadata(
+      key,
+    );
     if (objectMetadata == null) {
       return null;
     }
@@ -1690,7 +1760,7 @@ class FsspecArtifactService extends BaseArtifactService {
           sessionId: sessionId,
           remainingDepth: maxDepth,
         );
-        return _loadArtifactSync(
+        return _loadArtifact(
           appName: parsedUri.appName,
           userId: parsedUri.userId,
           sessionId: parsedUri.sessionId,
@@ -1707,7 +1777,7 @@ class FsspecArtifactService extends BaseArtifactService {
 
     List<int> data;
     try {
-      data = _fs.catFile(key);
+      data = await _fs.catFile(key);
     } catch (error) {
       if (_isMissingError(error)) {
         return null;
@@ -1739,18 +1809,18 @@ class FsspecArtifactService extends BaseArtifactService {
     required String userId,
     String? sessionId,
   }) async {
-    return _listArtifactKeysSync(
+    return _listArtifactKeys(
       appName: appName,
       userId: userId,
       sessionId: sessionId,
     );
   }
 
-  List<String> _listArtifactKeysSync({
+  Future<List<String>> _listArtifactKeys({
     required String appName,
     required String userId,
     required String? sessionId,
-  }) {
+  }) async {
     _validatePathSegment(appName, 'app_name');
     _validatePathSegment(userId, 'user_id');
     final List<String> scopes = <String>[
@@ -1763,7 +1833,10 @@ class FsspecArtifactService extends BaseArtifactService {
 
     final Set<String> filenames = <String>{};
     for (final String scope in scopes) {
-      for (final String relPath in _findDetail(scope).keys) {
+      final Map<String, Map<String, Object?>> entries = await _findDetail(
+        scope,
+      );
+      for (final String relPath in entries.keys) {
         final int slashIdx = relPath.lastIndexOf('/');
         if (slashIdx <= 0) {
           continue;
@@ -1786,7 +1859,7 @@ class FsspecArtifactService extends BaseArtifactService {
     required String filename,
     String? sessionId,
   }) async {
-    _deleteArtifactSync(
+    await _deleteArtifact(
       appName: appName,
       userId: userId,
       sessionId: sessionId,
@@ -1794,22 +1867,22 @@ class FsspecArtifactService extends BaseArtifactService {
     );
   }
 
-  void _deleteArtifactSync({
+  Future<void> _deleteArtifact({
     required String appName,
     required String userId,
     required String? sessionId,
     required String filename,
-  }) {
+  }) async {
     final String artifactPath = _artifactPath(
       appName,
       userId,
       sessionId,
       filename,
     );
-    for (final int version in _versionsUnder(artifactPath)) {
+    for (final int version in await _versionsUnder(artifactPath)) {
       final String key = '$artifactPath/$version';
       try {
-        _fs.rmFile(key);
+        await _fs.rmFile(key);
       } catch (error) {
         if (!_isMissingError(error)) {
           rethrow;
@@ -1832,9 +1905,12 @@ class FsspecArtifactService extends BaseArtifactService {
     );
   }
 
-  List<int> _versionsUnder(String artifactPath) {
+  Future<List<int>> _versionsUnder(String artifactPath) async {
     final List<int> versions = <int>[];
-    for (final String suffix in _findDetail(artifactPath).keys) {
+    final Map<String, Map<String, Object?>> entries = await _findDetail(
+      artifactPath,
+    );
+    for (final String suffix in entries.keys) {
       final int? version = suffix.contains('/') ? null : _parseVersion(suffix);
       if (version == null) {
         continue;
@@ -1882,7 +1958,10 @@ class FsspecArtifactService extends BaseArtifactService {
     final Map<String, Map<String, Object?>> versionEntries =
         <String, Map<String, Object?>>{};
     final Map<String, int> versionByKey = <String, int>{};
-    _findDetail(artifactPath).forEach((
+    final Map<String, Map<String, Object?>> entries = await _findDetail(
+      artifactPath,
+    );
+    entries.forEach((
       String suffix,
       Map<String, Object?> info,
     ) {
@@ -1894,7 +1973,7 @@ class FsspecArtifactService extends BaseArtifactService {
       versionEntries[key] = info;
       versionByKey[key] = version;
     });
-    final Map<String, FsspecObjectMetadata> metadataByKey = _backend
+    final Map<String, FsspecObjectMetadata> metadataByKey = await _backend
         .readListingMetadata(versionEntries);
     final List<ArtifactVersion> artifactVersions = <ArtifactVersion>[];
     metadataByKey.forEach((String key, FsspecObjectMetadata objectMetadata) {
@@ -1927,7 +2006,7 @@ class FsspecArtifactService extends BaseArtifactService {
     );
     int resolvedVersion;
     if (version == null) {
-      final List<int> versions = _versionsUnder(artifactPath);
+      final List<int> versions = await _versionsUnder(artifactPath);
       if (versions.isEmpty) {
         return null;
       }
@@ -1939,7 +2018,9 @@ class FsspecArtifactService extends BaseArtifactService {
     }
     final String key = '$artifactPath/$resolvedVersion';
 
-    final FsspecObjectMetadata? objectMetadata = _backend.readMetadata(key);
+    final FsspecObjectMetadata? objectMetadata = await _backend.readMetadata(
+      key,
+    );
     if (objectMetadata == null) {
       return null;
     }
