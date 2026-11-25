@@ -1,42 +1,76 @@
 # ADK Go Daily Change Report
 
-- Date (UTC): 2026-11-24
+- Date (UTC): 2026-11-25
 - Source: `google/adk-go`
-- Latest SHA: `e52983b4b9d29d873e061e52e10ff391135feced`
-- Previous SHA: `57c6bd80dc6a981e2db426fecb33adc139e509ac`
+- Latest SHA: `7abba5655551d344b8ec4c56a92f3578631bcf4c`
+- Previous SHA: `e52983b4b9d29d873e061e52e10ff391135feced`
 
 ## Summary
 
-- New commits: 5
+- New commits: 7
 
 ## Commits
 
-- [e52983b](https://github.com/google/adk-go/commit/e52983b4b9d29d873e061e52e10ff391135feced) fix(workflow): preserve array order in schema literal values (#2465) (噜噜, 2026-11-25)
-- [29465f6](https://github.com/google/adk-go/commit/29465f6d392a6775079447b66f0c11cc03f890a6) feat(model/gemini): trace context cache actions and failures (#2419) (wolo, 2026-11-24)
-- [ed17582](https://github.com/google/adk-go/commit/ed1758224eea3315507619446f3fc79e6d5ac25a) fix(anthropic): update default model configuration (#2486) (indurireddy-TF, 2026-11-24)
-- [fea9549](https://github.com/google/adk-go/commit/fea95495a9f55d13536e03e0230f247c63e10adb) feat(adkrest): list artifact versions over REST (#2473) (ktsoator, 2026-11-24)
-- [754138b](https://github.com/google/adk-go/commit/754138be96daa9a6d51d6e152e99ba56c889f7cf) fix(agentregistry): authenticate MCP egress only to Google API hosts (#2476) (wolo, 2026-11-24)
+- [7abba56](https://github.com/google/adk-go/commit/7abba5655551d344b8ec4c56a92f3578631bcf4c) feat(mcptoolset,remoteagent): present the client certificate to Google API hosts (#2418) (wolo, 2026-11-25)
+- [4de6a96](https://github.com/google/adk-go/commit/4de6a9667904f8fbc885950098525cd306f39e51) feat(llmagent,loadartifactstool): add OutputArtifact and versioned artifact loading (#1688) (Sasha, 2026-11-25)
+- [97864da](https://github.com/google/adk-go/commit/97864da015410867e1cbc8a981123077066aec41) fix(configurable): require opt-in for stdio MCP configs (#2497) (ktsoator, 2026-11-25)
+- [df0eec1](https://github.com/google/adk-go/commit/df0eec19d3c58812e7efa41531f193b72e4279b6) fix(agenttool): keep code artifacts out of structured replies (#2468) (wangshun, 2026-11-25)
+- [3a53b39](https://github.com/google/adk-go/commit/3a53b396b622cb4e3768957d1b9d8f93c801136b) feat(version): report the hosting runtime in tracking headers (#2457) (wolo, 2026-11-25)
+- [ba236dc](https://github.com/google/adk-go/commit/ba236dc90e5970564befba72daa40551cdb1c382) test: pin the panic text that a failed tool keeps from the model (#2487) (SandeepVijayarao, 2026-11-25)
+- [0697df1](https://github.com/google/adk-go/commit/0697df183ce239b8f21e4253e220b4a454a40c72) fix(openaimodel): reject streamed function call events without item_id (#2483) (ocharrez, 2026-11-25)
 
 ## Changed Files
 
-- `M	agentregistry/factory.go`
-- `M	agentregistry/factory_test.go`
-- `M	examples/anthropic/README.md`
-- `M	examples/anthropic/main.go`
-- `M	examples/contextcache/README.md`
-- `A	internal/telemetry/context_cache.go`
-- `M	internal/utils/schema_canonical.go`
-- `M	internal/utils/schema_canonical_test.go`
-- `M	model/anthropicmodel/doc.go`
-- `M	model/cache.go`
+- `M	agent/llmagent/llm_agent_wrapper.go`
+- `M	agent/llmagent/llm_agent_wrapper_test.go`
+- `M	agent/llmagent/llmagent.go`
+- `M	agent/llmagent/llmagent_saveoutput_test.go`
+- `M	agent/remoteagent/v2/a2a_agent.go`
+- `M	agent/remoteagent/v2/a2a_agent_test.go`
+- `M	agent/remoteagent/v2/auth.go`
+- `M	agent/remoteagent/v2/auth_test.go`
+- `A	agent/remoteagent/v2/main_test.go`
+- `A	agent/remoteagent/v2/mtls_test.go`
+- `M	agent/workflowagents/sequentialagent/agent.go`
+- `M	internal/artifact/artifacts.go`
+- `M	internal/artifact/forwarding.go`
+- `M	internal/configurable/configurable_utils.go`
+- `M	internal/configurable/configurable_utils_test.go`
+- `M	internal/credredirect/credredirect.go`
+- `M	internal/credredirect/credredirect_test.go`
+- `A	internal/googlemtls/googlemtls.go`
+- `A	internal/googlemtls/googlemtls_test.go`
+- `A	internal/googlemtls/googlemtlstest/googlemtlstest.go`
+- `A	internal/googlemtls/handshake_test.go`
+- `A	internal/googlemtls/main_test.go`
+- `M	internal/llminternal/agent.go`
+- `M	internal/llminternal/base_flow_test.go`
+- `M	internal/llminternal/outputschema_processor.go`
+- `M	internal/toolinternal/tool_test.go`
+- `M	internal/version/tracking.go`
+- `M	internal/version/tracking_test.go`
+- `A	internal/version/versiontest/versiontest.go`
+- `M	model/anthropicmodel/anthropicmodel.go`
+- `M	model/anthropicmodel/anthropicmodel_test.go`
+- `M	model/apigee/apigee_test.go`
 - `M	model/gemini/context_cache.go`
-- `A	model/gemini/context_cache_telemetry_test.go`
 - `M	model/gemini/context_cache_test.go`
 - `M	model/gemini/gemini.go`
-- `A	runner/context_cache_telemetry_test.go`
-- `M	runner/context_cache_test.go`
-- `A	server/adkrest/artifact_versions_integration_test.go`
-- `M	server/adkrest/controllers/artifacts.go`
-- `M	server/adkrest/controllers/artifacts_test.go`
-- `M	server/adkrest/internal/routers/artifacts.go`
-- `M	workflow/validation_test.go`
+- `M	model/gemini/gemini_test.go`
+- `M	model/openaimodel/internal/responses/model_test.go`
+- `M	model/openaimodel/internal/responses/stream.go`
+- `M	model/openaimodel/internal/responses/stream_test.go`
+- `M	plugin/retryandreflect/plugin_test.go`
+- `M	tool/agenttool/agent_tool.go`
+- `M	tool/agenttool/agent_tool_artifacts_test.go`
+- `M	tool/agenttool/agent_tool_test.go`
+- `A	tool/agenttool/workflow_tool_panic_test.go`
+- `M	tool/bigquerytoolset/client.go`
+- `M	tool/bigquerytoolset/toolset_test.go`
+- `M	tool/loadartifactstool/load_artifacts_tool.go`
+- `M	tool/loadartifactstool/load_artifacts_tool_test.go`
+- `A	tool/mcptoolset/main_test.go`
+- `A	tool/mcptoolset/mtls_test.go`
+- `M	tool/mcptoolset/set.go`
+- `M	tool/mcptoolset/tracking.go`
+- `M	tool/mcptoolset/tracking_test.go`
