@@ -41,6 +41,7 @@ class TeamsActivity {
     this.type = 'message',
     this.text,
     this.fromId,
+    this.fromAadObjectId,
     this.conversationId,
   });
 
@@ -48,12 +49,25 @@ class TeamsActivity {
   factory TeamsActivity.fromJson(Map<String, Object?> json) {
     final Object? fromObj = json['from'] ?? json['from_property'];
     final Object? convObj = json['conversation'];
+    String? rawFromId;
+    String? rawAadObjectId;
+    if (fromObj is Map) {
+      rawFromId = fromObj['id'] as String?;
+      rawAadObjectId =
+          (fromObj['aadObjectId'] ?? fromObj['aad_object_id']) as String?;
+    } else {
+      rawFromId = json['fromId'] as String?;
+      rawAadObjectId =
+          (json['fromAadObjectId'] ??
+                  json['aadObjectId'] ??
+                  json['aad_object_id'])
+              as String?;
+    }
     return TeamsActivity(
       type: (json['type'] as String?) ?? 'message',
       text: json['text'] as String?,
-      fromId: fromObj is Map
-          ? (fromObj['id'] as String?)
-          : (json['fromId'] as String?),
+      fromId: rawFromId,
+      fromAadObjectId: rawAadObjectId,
       conversationId: convObj is Map
           ? (convObj['id'] as String?)
           : (json['conversationId'] as String?),
@@ -66,8 +80,19 @@ class TeamsActivity {
   /// Message text payload, if any.
   final String? text;
 
-  /// Sender user identifier (`from.id`).
+  /// Sender channel account identifier (`from.id`).
   final String? fromId;
+
+  /// Sender Microsoft Entra object identifier (`from.aadObjectId`).
+  final String? fromAadObjectId;
+
+  /// Resolved ADK user identifier, preferring [fromAadObjectId] over [fromId].
+  String? get userId {
+    if (fromAadObjectId != null && fromAadObjectId!.isNotEmpty) {
+      return fromAadObjectId;
+    }
+    return fromId;
+  }
 
   /// Conversation identifier (`conversation.id`).
   final String? conversationId;
@@ -76,7 +101,11 @@ class TeamsActivity {
   Map<String, Object?> toJson() => <String, Object?>{
     'type': type,
     if (text != null) 'text': text,
-    if (fromId != null) 'from': <String, Object?>{'id': fromId},
+    if (fromId != null || fromAadObjectId != null)
+      'from': <String, Object?>{
+        if (fromId != null) 'id': fromId,
+        if (fromAadObjectId != null) 'aadObjectId': fromAadObjectId,
+      },
     if (conversationId != null)
       'conversation': <String, Object?>{'id': conversationId},
   };
@@ -297,7 +326,7 @@ class TeamsRunner {
     if (text.isEmpty) {
       return;
     }
-    final String? userId = activity.fromId;
+    final String? userId = activity.userId;
     final String? conversationId = activity.conversationId;
     if (userId == null ||
         userId.isEmpty ||
@@ -364,8 +393,6 @@ class TeamsRunner {
           parts: <Part>[Part.text(text)],
         );
 
-        bool sentReply = false;
-        String? errorCode;
         await for (final Event event in runner.runAsync(
           userId: userId,
           sessionId: session.id,
@@ -374,23 +401,24 @@ class TeamsRunner {
           if (event.partial == true) {
             continue;
           }
-          if (event.content != null && event.content!.parts.isNotEmpty) {
-            for (final Part part in event.content!.parts) {
-              if (part.text != null &&
-                  part.text!.isNotEmpty &&
-                  !part.thought) {
-                await context.sendActivity(part.text!);
-                sentReply = true;
-              }
+          final bool hasContent =
+              event.content != null && event.content!.parts.isNotEmpty;
+          if (event.errorCode != null || event.errorMessage != null) {
+            if (!hasContent) {
+              await context.sendActivity(_errorReply);
+              continue;
             }
           }
-          if (event.errorCode != null) {
-            errorCode = event.errorCode;
+          if (!hasContent) {
+            continue;
           }
-        }
-
-        if (!sentReply && errorCode != null) {
-          await context.sendActivity(_errorReply);
+          for (final Part part in event.content!.parts) {
+            if (part.text != null &&
+                part.text!.isNotEmpty &&
+                !part.thought) {
+              await context.sendActivity(part.text!);
+            }
+          }
         }
       } catch (_) {
         try {

@@ -1025,10 +1025,14 @@ void main() {
   });
 
   group('9. VMaaS AgentEngineEnvironment timeout cap and chunked file I/O', () {
-    test('caps execution timeout at 570s, enforces 1 MiB read limit, and chunks large writes', () async {
+    test('caps execution timeout at 570s, reads > 1 MiB files in slices, and chunks large writes', () async {
       Duration? recordedTimeout;
       final List<String> executedCommands = <String>[];
       final Uint8List smallBytes = Uint8List.fromList(utf8.encode('hello vmaas'));
+      final int largeSize = AgentEngineEnvironment.readSliceBytes + 500000;
+      final Uint8List largeBytes = Uint8List.fromList(
+        List<int>.generate(largeSize, (int i) => i % 251),
+      );
 
       final ShellBackedAgentEngineSandboxClient client =
           ShellBackedAgentEngineSandboxClient(
@@ -1043,9 +1047,9 @@ void main() {
               executedCommands.add(command);
               if (command.contains('stat -L -c %s')) {
                 if (command.contains('oversize.bin')) {
-                  return const EnvironmentExecutionResult(
+                  return EnvironmentExecutionResult(
                     exitCode: 67,
-                    stdout: '2000000\n',
+                    stdout: '$largeSize\n',
                   );
                 }
                 return EnvironmentExecutionResult(
@@ -1054,6 +1058,21 @@ void main() {
                 );
               }
               if (command.contains('dd if=')) {
+                if (command.contains('oversize.bin')) {
+                  final RegExpMatch? skipMatch = RegExp(
+                    r'skip=(\d+)',
+                  ).firstMatch(command);
+                  final int index = int.parse(skipMatch!.group(1)!);
+                  final int start = index * AgentEngineEnvironment.readSliceBytes;
+                  final int end =
+                      (start + AgentEngineEnvironment.readSliceBytes) < largeSize
+                          ? start + AgentEngineEnvironment.readSliceBytes
+                          : largeSize;
+                  return EnvironmentExecutionResult(
+                    exitCode: 0,
+                    stdout: base64Encode(largeBytes.sublist(start, end)),
+                  );
+                }
                 return EnvironmentExecutionResult(
                   exitCode: 0,
                   stdout: base64Encode(smallBytes),
@@ -1083,10 +1102,15 @@ void main() {
       final List<int> readResult = await env.readFile('/workspace/small.txt');
       expect(utf8.decode(readResult), 'hello vmaas');
 
-      // 3) readFile throws StateError when file exceeds 1 MiB
-      await expectLater(
-        () => env.readFile('/workspace/oversize.bin'),
-        throwsStateError,
+      // 3) readFile falls back to multi-slice dd loop when exit code 67 (> 1 MiB)
+      executedCommands.clear();
+      final List<int> largeReadResult = await env.readFile(
+        '/workspace/oversize.bin',
+      );
+      expect(largeReadResult, equals(largeBytes));
+      expect(
+        executedCommands.where((String cmd) => cmd.contains('dd if=')),
+        hasLength(2),
       );
 
       // 4) writeBytes > 64 MiB throws ArgumentError

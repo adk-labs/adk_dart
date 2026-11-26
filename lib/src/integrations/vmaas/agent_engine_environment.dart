@@ -170,9 +170,21 @@ class ShellBackedAgentEngineSandboxClient
       throw StateError('File not found: $path');
     }
     if (sizeResult.exitCode == 67) {
-      throw StateError(
-        'File "$path" (${sizeResult.stdout.trim()} bytes) exceeds the 1 MiB '
-        'read limit (${AgentEngineEnvironment.maxReadFileBytes} bytes).',
+      final int? totalSize = int.tryParse(sizeResult.stdout.trim());
+      if (totalSize == null || totalSize < 0) {
+        throw StateError(
+          "Failed to read '$path' from Agent Engine sandbox: "
+          'invalid file size "${sizeResult.stdout.trim()}".',
+        );
+      }
+      if (totalSize == 0) {
+        return Uint8List(0);
+      }
+      return _readFileInSlices(
+        sandboxResourceName: sandboxResourceName,
+        path: path,
+        quoted: quoted,
+        totalSize: totalSize,
       );
     }
     if (sizeResult.exitCode != 0) {
@@ -192,24 +204,25 @@ class ShellBackedAgentEngineSandboxClient
         );
       }
       final String cleaned = res.stdout.replaceAll(RegExp(r'\s+'), '');
-      final Uint8List decoded = Uint8List.fromList(base64Decode(cleaned));
-      if (decoded.length > AgentEngineEnvironment.maxReadFileBytes) {
-        throw StateError(
-          'File "$path" (${decoded.length} bytes) exceeds the 1 MiB '
-          'read limit (${AgentEngineEnvironment.maxReadFileBytes} bytes).',
-        );
-      }
-      return decoded;
+      return Uint8List.fromList(base64Decode(cleaned));
     }
     if (totalSize == 0) {
       return Uint8List(0);
     }
-    if (totalSize > AgentEngineEnvironment.maxReadFileBytes) {
-      throw StateError(
-        'File "$path" ($totalSize bytes) exceeds the 1 MiB '
-        'read limit (${AgentEngineEnvironment.maxReadFileBytes} bytes).',
-      );
-    }
+    return _readFileInSlices(
+      sandboxResourceName: sandboxResourceName,
+      path: path,
+      quoted: quoted,
+      totalSize: totalSize,
+    );
+  }
+
+  Future<Uint8List> _readFileInSlices({
+    required String sandboxResourceName,
+    required String path,
+    required String quoted,
+    required int totalSize,
+  }) async {
     final BytesBuilder builder = BytesBuilder(copy: false);
     final int sliceSize = AgentEngineEnvironment.readSliceBytes;
     final int sliceCount = (totalSize + sliceSize - 1) ~/ sliceSize;
@@ -217,7 +230,7 @@ class ShellBackedAgentEngineSandboxClient
       final EnvironmentExecutionResult sliceResult = await execute(
         sandboxResourceName: sandboxResourceName,
         command:
-            'dd if=$quoted bs=$sliceSize skip=$index count=1 status=none | base64',
+            'dd if=$quoted bs=$sliceSize skip=$index count=1 iflag=fullblock status=none | base64',
       );
       if (sliceResult.exitCode != 0) {
         throw StateError(
@@ -657,12 +670,6 @@ class AgentEngineEnvironment extends BaseEnvironment {
     final Uint8List? bytes = _inMemoryFallbackFiles[resolved];
     if (bytes == null) {
       throw StateError("File not found in AgentEngineEnvironment: '$resolved'");
-    }
-    if (bytes.length > maxReadFileBytes) {
-      throw StateError(
-        'File "$resolved" (${bytes.length} bytes) exceeds the 1 MiB '
-        'read limit ($maxReadFileBytes bytes).',
-      );
     }
     return Uint8List.fromList(bytes);
   }

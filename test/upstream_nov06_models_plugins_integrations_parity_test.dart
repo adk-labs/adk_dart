@@ -341,17 +341,17 @@ void main() {
               return http.Response(
                 jsonEncode(<String, Object?>{
                   'model': 'gpt-decisions-1',
-                  'decisions': <String, Object?>{
-                    'q1': <String, Object?>{
+                  'answers': <Map<String, Object?>>[
+                    <String, Object?>{
                       'type': 'choice',
-                      'selected': 'yes',
+                      'name': 'q1',
                       'choice': 'yes',
-                      'probabilities': <String, double>{
-                        'yes': 0.9,
-                        'no': 0.1,
-                      },
+                      'probabilities': <Map<String, Object?>>[
+                        <String, Object?>{'value': 'yes', 'probability': 0.9},
+                        <String, Object?>{'value': 'no', 'probability': 0.1},
+                      ],
                     },
-                  },
+                  ],
                 }),
                 200,
               );

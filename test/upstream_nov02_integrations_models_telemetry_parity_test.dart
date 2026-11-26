@@ -376,32 +376,39 @@ void main() {
       final _FakeDecisionsClient client = _FakeDecisionsClient()
         ..nextResponse = <String, Object?>{
           'model': 'gpt-6-luna-2026',
-          'decisions': <String, Object?>{
-            'is_safe': <String, Object?>{
+          'answers': <Map<String, Object?>>[
+            <String, Object?>{
               'type': 'predicate',
-              'probability_true': 0.92,
+              'name': 'is_safe',
+              'probability': 0.92,
+              'confidence': 0.95,
             },
-            'intent': <String, Object?>{
+            <String, Object?>{
               'type': 'choice',
-              'selected': 'billing',
-              'probabilities': <String, Object?>{
-                'billing': 0.8,
-                'support': 0.2,
-              },
+              'name': 'intent',
+              'choice': 'billing',
+              'probabilities': <Map<String, Object?>>[
+                <String, Object?>{'value': 'billing', 'probability': 0.8},
+                <String, Object?>{'value': 'support', 'probability': 0.2},
+              ],
+              'confidence': 0.88,
             },
-            'urgency': <String, Object?>{
+            <String, Object?>{
               'type': 'score',
-              'expected_score': 1.4,
-              'probabilities': <String, Object?>{
-                '0': 0.1,
-                '1': 0.4,
-                '2': 0.5,
-              },
+              'name': 'urgency',
+              'score': 1.4,
+              'probabilities': <Map<String, Object?>>[
+                <String, Object?>{'value': 0, 'label': '0', 'probability': 0.1},
+                <String, Object?>{'value': 1, 'label': '1', 'probability': 0.4},
+                <String, Object?>{'value': 2, 'label': '2', 'probability': 0.5},
+              ],
+              'confidence': 0.91,
             },
-            'sensitive': <String, Object?>{
+            <String, Object?>{
               'type': 'refusal',
+              'name': 'sensitive',
             },
-          },
+          ],
           'usage': <String, Object?>{
             'input_tokens': 40,
             'output_tokens': 12,
@@ -437,12 +444,21 @@ void main() {
       );
 
       expect(response.modelVersion, 'gpt-6-luna-2026');
-      expect((response.answers['is_safe'] as BinaryAnswer).probability, 0.92);
-      expect((response.answers['intent'] as ChoiceAnswer).choice, 'billing');
+      final BinaryAnswer isSafe = response.answers['is_safe'] as BinaryAnswer;
+      expect(isSafe.probability, 0.92);
+      expect(isSafe.confidence, 0.95);
+      final ChoiceAnswer intent = response.answers['intent'] as ChoiceAnswer;
+      expect(intent.choice, 'billing');
+      expect(intent.probabilities, <String, double>{
+        'billing': 0.8,
+        'support': 0.2,
+      });
+      expect(intent.confidence, 0.88);
       final ScoreAnswer urgency = response.answers['urgency'] as ScoreAnswer;
       expect(urgency.score, 1.4);
       expect(urgency.expected, 1.4);
       expect(urgency.probabilities[2], 0.5);
+      expect(urgency.confidence, 0.91);
       expect(response.answers['sensitive'], isA<RefusalAnswer>());
     });
 

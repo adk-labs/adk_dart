@@ -1232,12 +1232,13 @@ void main() {
         return http.Response(
           jsonEncode(<String, Object?>{
             'model': 'gpt-6-luna',
-            'decisions': <String, Object?>{
-              'ok': <String, Object?>{
+            'answers': <Map<String, Object?>>[
+              <String, Object?>{
                 'type': 'predicate',
-                'probability_true': 0.9,
+                'name': 'ok',
+                'probability': 0.9,
               },
-            },
+            ],
           }),
           200,
         );

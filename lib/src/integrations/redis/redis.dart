@@ -357,6 +357,39 @@ class RedisSessionService extends BaseSessionService {
     };
   }
 
+  SessionStateDelta _extractJsonSafeStateDelta(Map<String, Object?>? state) {
+    final SessionStateDelta delta = extractStateDelta(state);
+    return SessionStateDelta(
+      app: makeJsonSafeState(delta.app),
+      user: makeJsonSafeState(delta.user),
+      session: makeJsonSafeState(delta.session),
+    );
+  }
+
+  /// Merges [delta] into the app or user state at [key] inside a watched
+  /// transaction and returns the merged state map.
+  Future<Map<String, Object?>> _applyScopedStateDelta(
+    String key,
+    Map<String, Object?> delta,
+  ) async {
+    if (delta.isEmpty) {
+      final String? raw = await _redisClient.get(key);
+      return _decodeJsonMap(raw);
+    }
+    Map<String, Object?> merged = <String, Object?>{};
+    await _redisClient.transaction((RedisStoreClient pipe) async {
+      final String? raw = await pipe.get(key);
+      merged = _decodeJsonMap(raw);
+      merged.addAll(delta);
+      await pipe.set(
+        key,
+        jsonEncode(merged),
+        exSeconds: _effectiveTtl,
+      );
+    }, key);
+    return merged;
+  }
+
   @override
   Future<Session> createSession({
     required String appName,
@@ -370,7 +403,8 @@ class RedisSessionService extends BaseSessionService {
     final String key = _sessionKey(appName, userId, sid);
 
     final Map<String, Object?> initialState = state ?? <String, Object?>{};
-    final SessionStateDelta stateDeltas = extractStateDelta(initialState);
+    final SessionStateDelta stateDeltas =
+        _extractJsonSafeStateDelta(initialState);
     final Map<String, Object?> appStateDelta = stateDeltas.app;
     final Map<String, Object?> userStateDelta = stateDeltas.user;
     final Map<String, Object?> sessionState = stateDeltas.session;
@@ -400,30 +434,14 @@ class RedisSessionService extends BaseSessionService {
       );
     }
 
-    final List<String?> rawStates = await Future.wait(<Future<String?>>[
-      _redisClient.get(appKey),
-      _redisClient.get(userKey),
-    ]);
-    final Map<String, Object?> currentApp = _decodeJsonMap(rawStates[0]);
-    final Map<String, Object?> currentUser = _decodeJsonMap(rawStates[1]);
-
-    if (appStateDelta.isNotEmpty) {
-      currentApp.addAll(appStateDelta);
-      await _redisClient.set(
-        appKey,
-        jsonEncode(currentApp),
-        exSeconds: _effectiveTtl,
-      );
-    }
-
-    if (userStateDelta.isNotEmpty) {
-      currentUser.addAll(userStateDelta);
-      await _redisClient.set(
-        userKey,
-        jsonEncode(currentUser),
-        exSeconds: _effectiveTtl,
-      );
-    }
+    final List<Map<String, Object?>> scopedStates = await Future.wait(
+      <Future<Map<String, Object?>>>[
+        _applyScopedStateDelta(appKey, appStateDelta),
+        _applyScopedStateDelta(userKey, userStateDelta),
+      ],
+    );
+    final Map<String, Object?> currentApp = scopedStates[0];
+    final Map<String, Object?> currentUser = scopedStates[1];
 
     final Map<String, Object?> mergedState = _mergeState(
       appState: currentApp,
@@ -602,6 +620,12 @@ class RedisSessionService extends BaseSessionService {
       throw SessionNotFoundError('Session ${session.id} not found.');
     }
 
+    // Extract JSON-safe deltas from the original event before super.appendEvent
+    // deep-copies values (which coerces Uint8List to List<Object?>).
+    final SessionStateDelta? preDeltas = event.actions.stateDelta.isNotEmpty
+        ? _extractJsonSafeStateDelta(event.actions.stateDelta)
+        : null;
+
     final Event appended = await super.appendEvent(
       session: session,
       event: event,
@@ -612,42 +636,42 @@ class RedisSessionService extends BaseSessionService {
     session.lastUpdateTime = appended.timestamp;
 
     Map<String, Object?> sessionDelta = <String, Object?>{};
-    if (appended.actions.stateDelta.isNotEmpty) {
-      final SessionStateDelta deltas = extractStateDelta(
-        appended.actions.stateDelta,
-      );
-      final Map<String, Object?> appDelta = deltas.app;
-      final Map<String, Object?> userDelta = deltas.user;
-      sessionDelta = deltas.session;
+    if (preDeltas != null) {
+      final Map<String, Object?> appDelta = preDeltas.app;
+      final Map<String, Object?> userDelta = preDeltas.user;
+      sessionDelta = preDeltas.session;
 
       if (appDelta.isNotEmpty) {
-        final String appKey = _appStateKey(session.appName);
-        final String? appRaw = await _redisClient.get(appKey);
-        final Map<String, Object?> appState = _decodeJsonMap(appRaw);
-        appState.addAll(appDelta);
-        await _redisClient.set(
-          appKey,
-          jsonEncode(appState),
-          exSeconds: _effectiveTtl,
+        await _applyScopedStateDelta(
+          _appStateKey(session.appName),
+          appDelta,
         );
       }
 
       if (userDelta.isNotEmpty) {
-        final String userKey = _userStateKey(session.appName, session.userId);
-        final String? userRaw = await _redisClient.get(userKey);
-        final Map<String, Object?> userState = _decodeJsonMap(userRaw);
-        userState.addAll(userDelta);
-        await _redisClient.set(
-          userKey,
-          jsonEncode(userState),
-          exSeconds: _effectiveTtl,
+        await _applyScopedStateDelta(
+          _userStateKey(session.appName, session.userId),
+          userDelta,
         );
       }
     }
 
-    final Map<String, Object?> sessionOnlyState = _extractSessionOnlyState(
-      session.state,
+    final Event storedEvent = appended.actions.stateDelta.isEmpty
+        ? appended
+        : appended.copyWith(
+            actions: appended.actions.copyWith(
+              stateDelta: makeJsonSafeState(
+                trimTempState(event.actions.stateDelta),
+              ),
+            ),
+          );
+
+    final Map<String, Object?> sessionOnlyState = makeJsonSafeState(
+      _extractSessionOnlyState(session.state),
     );
+    if (sessionDelta.isNotEmpty) {
+      sessionOnlyState.addAll(sessionDelta);
+    }
     final Session storageSession = Session(
       id: session.id,
       appName: session.appName,
@@ -665,12 +689,15 @@ class RedisSessionService extends BaseSessionService {
         );
         storageSession.events = storedSession.events;
         storageSession.state = storedSession.state;
-        storageSession.events.add(appended);
+        storageSession.events.add(storedEvent);
         if (sessionDelta.isNotEmpty) {
           storageSession.state.addAll(sessionDelta);
         }
       } else {
-        storageSession.events = List<Event>.from(session.events);
+        storageSession.events = <Event>[
+          for (final Event existing in session.events)
+            existing.id == storedEvent.id ? storedEvent : existing,
+        ];
         storageSession.state = Map<String, Object?>.from(sessionOnlyState);
       }
       await pipe.set(
@@ -829,7 +856,7 @@ Map<String, Object?> _redisEventActionsToJson(EventActions actions) {
   return <String, Object?>{
     if (actions.skipSummarization != null)
       'skipSummarization': actions.skipSummarization,
-    'stateDelta': actions.stateDelta,
+    'stateDelta': makeJsonSafeState(actions.stateDelta),
     'artifactDelta': actions.artifactDelta,
     if (actions.transferToAgent != null)
       'transferToAgent': actions.transferToAgent,

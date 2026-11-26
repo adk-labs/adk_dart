@@ -16,6 +16,7 @@ const String _defaultDecisionsModel = 'gpt-6-luna';
 const String _defaultOpenAiBaseUrl = 'https://api.openai.com/v1';
 const int _maxChoices = 255;
 const int _maxScoreLevels = 10;
+const double _tolerance = 1e-6;
 
 /// HTTP transport interface for sending `/decisions` requests.
 ///
@@ -136,28 +137,25 @@ class OpenAIDecisionsClassifier extends BaseClassifier {
       };
 
       final Map<String, Object?> rawResponse = await _postDecisions(payload);
-      final Object? rawDecisions = rawResponse['decisions'];
-      if (rawDecisions is! Map) {
+      final Object? rawAnswers = rawResponse['answers'];
+      if (rawAnswers is! List) {
         throw StateError(
-          'OpenAI /decisions response missing "decisions" map: $rawResponse',
+          'OpenAI /decisions response missing "answers" list: $rawResponse',
         );
       }
 
+      final Map<String, Map<String, Object?>> answersByName =
+          _indexAnswersByName(rawAnswers);
       final Map<String, ClassifierAnswer> answers = <String, ClassifierAnswer>{};
       for (final MapEntry<String, ClassifierQuestion> entry
           in questions.entries) {
-        final Object? rawDecision = rawDecisions[entry.key];
-        if (rawDecision is! Map) {
+        final Map<String, Object?>? rawAnswer = answersByName[entry.key];
+        if (rawAnswer == null) {
           throw StateError(
-            'OpenAI /decisions response missing decision for question '
-            '"${entry.key}".',
+            'OpenAI /decisions response returned no answer to "${entry.key}".',
           );
         }
-        final Map<String, Object?> decisionMap = <String, Object?>{
-          for (final MapEntry<Object?, Object?> item in rawDecision.entries)
-            '${item.key}': item.value,
-        };
-        answers[entry.key] = _parseAnswer(entry.key, entry.value, decisionMap);
+        answers[entry.key] = _parseAnswer(entry.key, entry.value, rawAnswer);
       }
 
       final Object? rawModel = rawResponse['model'];
@@ -234,16 +232,20 @@ Map<String, Object?> _toDecisionQuestion(String name, ClassifierQuestion q) {
       'Question name must not be empty.',
     );
   }
-  final String baseInstructions = q.instructions ?? '';
+  if (q.instructions == null) {
+    throw ArgumentError.value(
+      q.instructions,
+      'instructions',
+      'OpenAIDecisionsClassifier needs instructions for question "$name".',
+    );
+  }
+  final String baseInstructions = q.instructions!;
   if (q is Binary) {
     String instructions = baseInstructions;
     if (q.criteria != null) {
       final String criteriaText = _criteriaToText(q.criteria);
-      final String suffix =
-          'True means: $criteriaText\nAnything else is false.';
-      instructions = instructions.isNotEmpty
-          ? '$instructions\n$suffix'
-          : suffix;
+      instructions =
+          '$instructions\nTrue means: $criteriaText\nAnything else is false.';
     }
     return <String, Object?>{
       'type': 'predicate',
@@ -269,10 +271,13 @@ Map<String, Object?> _toDecisionQuestion(String name, ClassifierQuestion q) {
           'Choice label in question "$name" must not be empty.',
         );
       }
-      choices.add(<String, Object?>{
+      final Map<String, Object?> choice = <String, Object?>{
         'value': entry.key,
-        'description': _criteriaToText(entry.value),
-      });
+      };
+      if (entry.value != null) {
+        choice['description'] = _criteriaToText(entry.value);
+      }
+      choices.add(choice);
     }
     return <String, Object?>{
       'type': 'choice',
@@ -307,6 +312,30 @@ Map<String, Object?> _toDecisionQuestion(String name, ClassifierQuestion q) {
   throw ArgumentError('Unsupported ClassifierQuestion: ${q.runtimeType}');
 }
 
+Map<String, Map<String, Object?>> _indexAnswersByName(
+  List<Object?> rawAnswers,
+) {
+  final Map<String, Map<String, Object?>> answers =
+      <String, Map<String, Object?>>{};
+  for (final Object? item in rawAnswers) {
+    if (item is! Map) {
+      throw StateError('OpenAI returned an answer that names no question.');
+    }
+    final Object? name = item['name'];
+    if (name is! String || name.isEmpty) {
+      throw StateError('OpenAI returned an answer that names no question.');
+    }
+    if (answers.containsKey(name)) {
+      throw StateError('OpenAI returned more than one answer to "$name".');
+    }
+    answers[name] = <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in item.entries)
+        '${entry.key}': entry.value,
+    };
+  }
+  return answers;
+}
+
 ClassifierAnswer _parseAnswer(
   String name,
   ClassifierQuestion q,
@@ -317,121 +346,145 @@ ClassifierAnswer _parseAnswer(
     return RefusalAnswer();
   }
 
-  if (q is Binary) {
-    if (rawType != 'predicate') {
-      throw StateError(
-        'Question "$name" expected a "predicate" decision, got "$rawType".',
-      );
-    }
-    final double prob = _requireProbability(
-      raw['probability_true'],
-      'decisions[$name].probability_true',
+  final String expectedType = q is Binary ? 'predicate' : q.type;
+  if (rawType != expectedType) {
+    throw StateError(
+      'OpenAI returned a "$rawType" answer to "$name", '
+      'which is a "$expectedType" question.',
     );
-    return BinaryAnswer(probability: prob);
+  }
+
+  final List<String> required = expectedType == 'predicate'
+      ? const <String>['probability']
+      : <String>[expectedType, 'probabilities'];
+  final List<String> missing = <String>[
+    for (final String key in required)
+      if (!raw.containsKey(key)) key,
+  ];
+  if (missing.isNotEmpty) {
+    throw StateError(
+      'OpenAI returned a malformed "$expectedType" answer to "$name", '
+      'missing $missing.',
+    );
+  }
+
+  final double? confidence = raw['confidence'] == null
+      ? null
+      : _readNumber(name, 'confidence', raw['confidence']);
+
+  if (q is Binary) {
+    return BinaryAnswer(
+      probability: _readNumber(name, 'probability', raw['probability']),
+      confidence: confidence,
+    );
   }
 
   if (q is Choice) {
-    if (rawType != 'choice') {
+    final Object? choice = raw['choice'];
+    if (choice is! String || !q.criteria.containsKey(choice)) {
       throw StateError(
-        'Question "$name" expected a "choice" decision, got "$rawType".',
+        'OpenAI chose "$choice" for "$name", which is not one of its labels.',
       );
     }
-    final Object? selected = raw['selected'];
-    if (selected is! String || !q.criteria.containsKey(selected)) {
-      throw StateError(
-        'Question "$name" returned unknown selected choice "$selected".',
-      );
-    }
-    final Object? rawProbs = raw['probabilities'];
-    if (rawProbs is! Map) {
-      throw StateError(
-        'Question "$name" choice decision is missing "probabilities" map.',
-      );
-    }
-    final Map<String, Object?> probMap = <String, Object?>{
-      for (final MapEntry<Object?, Object?> item in rawProbs.entries)
-        '${item.key}': item.value,
-    };
-    if (probMap.length != q.criteria.length ||
-        !q.criteria.keys.every(probMap.containsKey)) {
-      throw StateError(
-        'Question "$name" probabilities keys ${probMap.keys.toList()} do not '
-        'match choice labels ${q.criteria.keys.toList()}.',
-      );
-    }
-    final Map<String, double> probabilities = <String, double>{
-      for (final String label in q.criteria.keys)
-        label: _requireProbability(
-          probMap[label],
-          'decisions[$name].probabilities[$label]',
-        ),
-    };
-    return ChoiceAnswer(choice: selected, probabilities: probabilities);
+    return ChoiceAnswer(
+      choice: choice,
+      probabilities: _readProbabilities<String>(
+        name,
+        expectedType,
+        raw['probabilities'],
+        q.criteria.keys.toList(growable: false),
+        isExpectedKeyType: (Object? value) => value is String,
+      ),
+      confidence: confidence,
+    );
   }
 
   if (q is Score) {
-    if (rawType != 'score') {
-      throw StateError(
-        'Question "$name" expected a "score" decision, got "$rawType".',
-      );
-    }
-    final int n = q.criteria.length;
-    final Object? rawProbs = raw['probabilities'];
-    if (rawProbs is! Map) {
-      throw StateError(
-        'Question "$name" score decision is missing "probabilities" map.',
-      );
-    }
-    final Map<String, Object?> probMap = <String, Object?>{
-      for (final MapEntry<Object?, Object?> item in rawProbs.entries)
-        '${item.key}': item.value,
-    };
-    final Set<String> expectedKeys = <String>{
-      for (int i = 0; i < n; i++) '$i',
-    };
-    if (probMap.length != expectedKeys.length ||
-        !expectedKeys.every(probMap.containsKey)) {
-      throw StateError(
-        'Question "$name" score probabilities keys ${probMap.keys.toList()} '
-        'do not match expected level labels ${expectedKeys.toList()}.',
-      );
-    }
-    final Map<int, double> probabilities = <int, double>{
-      for (int i = 0; i < n; i++)
-        i: _requireProbability(
-          probMap['$i'],
-          'decisions[$name].probabilities[$i]',
-        ),
-    };
-    final Object? rawExpected = raw['expected_score'];
-    if (rawExpected is! num || rawExpected is bool) {
-      throw StateError(
-        'decisions[$name].expected_score must be a finite number, '
-        'got $rawExpected.',
-      );
-    }
-    final double expected = rawExpected.toDouble();
-    if (!expected.isFinite || expected < 0.0 || expected > n - 1) {
-      throw StateError(
-        'decisions[$name].expected_score must be in [0, ${n - 1}], '
-        'got $expected.',
-      );
-    }
-    return ScoreAnswer(score: expected, probabilities: probabilities);
+    final int top = q.criteria.length - 1;
+    return ScoreAnswer(
+      score: _readNumber(name, 'score', raw['score'], high: top.toDouble()),
+      probabilities: _readProbabilities<int>(
+        name,
+        expectedType,
+        raw['probabilities'],
+        List<int>.generate(top + 1, (int i) => i, growable: false),
+        isExpectedKeyType: (Object? value) => value is int,
+      ),
+      confidence: confidence,
+    );
   }
 
   throw StateError('Unsupported question type: ${q.runtimeType}');
 }
 
-double _requireProbability(Object? value, String fieldName) {
-  if (value is! num || value is bool) {
-    throw StateError('$fieldName must be a finite probability, got $value.');
+Map<K, double> _readProbabilities<K>(
+  String name,
+  String answerType,
+  Object? rawItems,
+  List<K> keys, {
+  required bool Function(Object? value) isExpectedKeyType,
+}) {
+  if (rawItems is! List) {
+    throw StateError(
+      'OpenAI returned a malformed "$answerType" answer to "$name", '
+      'whose probabilities are not a list of values and probabilities.',
+    );
+  }
+  final Map<K, Object?> byValue = <K, Object?>{};
+  for (final Object? item in rawItems) {
+    if (item is! Map ||
+        !item.containsKey('value') ||
+        !item.containsKey('probability')) {
+      throw StateError(
+        'OpenAI returned a malformed "$answerType" answer to "$name", '
+        'whose probabilities are not a list of values and probabilities.',
+      );
+    }
+    final Object? value = item['value'];
+    if (!isExpectedKeyType(value)) {
+      throw StateError(
+        'OpenAI returned probabilities for $rawItems in "$name", '
+        'expected $keys.',
+      );
+    }
+    final K typedKey = value as K;
+    if (byValue.containsKey(typedKey)) {
+      throw StateError(
+        'OpenAI returned duplicate probability for "$typedKey" in "$name".',
+      );
+    }
+    byValue[typedKey] = item['probability'];
+  }
+  if (byValue.length != keys.length || !keys.every(byValue.containsKey)) {
+    throw StateError(
+      'OpenAI returned probabilities for ${byValue.keys.toList()} in "$name", '
+      'expected $keys.',
+    );
+  }
+  return <K, double>{
+    for (final K key in keys)
+      key: _readNumber(name, '$key', byValue[key]),
+  };
+}
+
+double _readNumber(
+  String name,
+  String key,
+  Object? value, {
+  double high = 1.0,
+}) {
+  if (value is bool || value is! num || !value.isFinite) {
+    throw StateError(
+      'OpenAI returned $value for "$key" in "$name", not a finite number.',
+    );
   }
   final double d = value.toDouble();
-  if (!d.isFinite || d < 0.0 || d > 1.0) {
-    throw StateError('$fieldName must be in [0.0, 1.0], got $d.');
+  if (d < -_tolerance || d > high + _tolerance) {
+    throw StateError(
+      'OpenAI returned $d for "$key" in "$name", outside [0, $high].',
+    );
   }
-  return d;
+  return d.clamp(0.0, high).toDouble();
 }
 
 String _criteriaToText(Object? value) {
@@ -451,19 +504,15 @@ String _inputToText(Object input) {
   if (input is Content) {
     final List<String> texts = <String>[];
     for (final Part part in input.parts) {
-      if (part.thought) {
-        continue;
-      }
-      if (part.text != null) {
-        texts.add(part.text!);
-      } else {
+      if (part.text == null) {
         throw ArgumentError(
-          'OpenAI classifiers only support text Content parts; '
-          'got non-text Part.',
+          'OpenAIDecisionsClassifier accepts text and JSON input only; '
+          'the input has a non-text Part.',
         );
       }
+      texts.add(part.text!);
     }
-    return texts.join('\n');
+    return texts.join('');
   }
   return jsonEncode(_toJsonEncodable(input));
 }
