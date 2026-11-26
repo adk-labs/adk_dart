@@ -262,6 +262,7 @@ class _ActiveTaskRun {
   final AdkAbortSignal abortSignal = AdkAbortSignal();
   final Completer<void> done = Completer<void>();
   bool terminalCancelEmitted = false;
+  bool propagateAbort = false;
 }
 
 class _ActiveTaskRegistry {
@@ -441,7 +442,11 @@ class A2aAgentExecutor {
       try {
         await _handleRequest(context, eventQueue, activeRun);
       } catch (error, stackTrace) {
-        if (activeRun.abortSignal.aborted || error is AdkAbortException) {
+        if (error is AdkAbortException &&
+            (!activeRun.abortSignal.aborted || activeRun.propagateAbort)) {
+          rethrow;
+        }
+        if (activeRun.abortSignal.aborted) {
           if (!activeRun.terminalCancelEmitted) {
             await eventQueue.enqueueEvent(
               A2aTaskStatusUpdateEvent(
@@ -559,6 +564,9 @@ class A2aAgentExecutor {
     await _consumeRunnerWithAbort(
       eventStream: eventStream,
       abortSignal: activeRun.abortSignal,
+      onUntriggeredAbort: () {
+        activeRun.propagateAbort = true;
+      },
       onEvent: (Event adkEvent) async {
         if (isAbortEvent(adkEvent) || activeRun.abortSignal.aborted) {
           aborted = true;
@@ -686,6 +694,7 @@ class A2aAgentExecutor {
     required Stream<Event> eventStream,
     required AdkAbortSignal abortSignal,
     required Future<void> Function(Event event) onEvent,
+    void Function()? onUntriggeredAbort,
   }) async {
     final Completer<void> done = Completer<void>();
     bool processingEvent = false;
@@ -748,15 +757,25 @@ class A2aAgentExecutor {
       cancelOnError: true,
     );
 
-    abortSignal.addListener((Object? _) {
+    void onAbortSignal(Object? _) {
       if (!done.isCompleted) {
         scheduleAbortWatchdog();
       }
-    });
+    }
+
+    abortSignal.addListener(onAbortSignal);
 
     try {
       await done.future;
+    } on AdkAbortException {
+      final bool abortTriggered = abortSignal.aborted;
+      abortSignal.abort();
+      if (!abortTriggered) {
+        onUntriggeredAbort?.call();
+        rethrow;
+      }
     } finally {
+      abortSignal.removeListener(onAbortSignal);
       abortWatchdog?.cancel();
       await subscription.cancel();
     }

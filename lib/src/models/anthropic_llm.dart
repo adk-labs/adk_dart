@@ -21,6 +21,8 @@ const String _anthropicBaseUrlEnv = 'ANTHROPIC_BASE_URL';
 const String _anthropicVersionEnv = 'ANTHROPIC_VERSION';
 const String _defaultAnthropicBaseUrl = 'https://api.anthropic.com/v1';
 const String _defaultAnthropicVersion = '2023-06-01';
+const String _samplingRemovedApiVersion = '2026-10-21';
+final RegExp _apiVersionDateRe = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 const String _outputSchemaToolName = 'structured_output';
 const String _outputSchemaToolDescription =
     'Provide your final answer. Call this tool exactly once, with your whole '
@@ -76,6 +78,39 @@ typedef AnthropicGcsDownloader =
 
 /// Optional process-wide GCS downloader override used by static helpers/tests.
 AnthropicGcsDownloader? anthropicGcsDownloaderForTest;
+
+/// Callback to intercept warnings emitted by [AnthropicLlm] (for testing).
+typedef AnthropicWarningHandler = void Function(String message);
+
+/// Optional process-wide warning handler override used by tests.
+AnthropicWarningHandler? anthropicWarningHandlerForTest;
+
+/// Optional Anthropic SDK major version override used by tests.
+int? anthropicSdkMajorVersionForTest;
+
+void _emitAnthropicWarning(String message) {
+  anthropicWarningHandlerForTest?.call(message);
+  developer.log(
+    message,
+    name: 'adk_dart.models.anthropic_llm',
+    level: 900,
+  );
+}
+
+String? _extractAnthropicVersionHeader(Map<String, String>? headers) {
+  if (headers == null || headers.isEmpty) {
+    return null;
+  }
+  bool found = false;
+  String? apiVersion;
+  for (final MapEntry<String, String> entry in headers.entries) {
+    if (entry.key.toLowerCase() == 'anthropic-version') {
+      found = true;
+      apiVersion = entry.value.trim();
+    }
+  }
+  return found ? apiVersion : null;
+}
 
 (String, String) _parseGcsUri(String fileUri) {
   final Uri? parsed = Uri.tryParse(fileUri);
@@ -922,6 +957,9 @@ class AnthropicLlm extends BaseLlm {
     this.environment,
     this.baseUrl,
     this.apiVersion,
+    this.defaultHeaders,
+    this.isVertex = false,
+    this.sdkMajorVersion,
     this.gcsDownloader,
     AnthropicRestTransport? restTransport,
     AnthropicGenerateHook? generateHook,
@@ -945,6 +983,15 @@ class AnthropicLlm extends BaseLlm {
 
   /// Optional `anthropic-version` header override.
   final String? apiVersion;
+
+  /// Optional default HTTP headers applied to outbound Anthropic requests.
+  final Map<String, String>? defaultHeaders;
+
+  /// Whether this adapter targets Vertex AI (which ignores HTTP version headers).
+  final bool isVertex;
+
+  /// Optional Anthropic SDK major version override.
+  final int? sdkMajorVersion;
 
   /// Optional downloader for `gs://` file URIs.
   final AnthropicGcsDownloader? gcsDownloader;
@@ -1530,6 +1577,26 @@ class AnthropicLlm extends BaseLlm {
     final bool thinkingEnabled = _thinkingIsEnabled(thinking);
     final String? effort = _extractEffort(request.config);
     final bool excludeSampling = thinkingEnabled || effort != null;
+    final bool hasSampling =
+        request.config.temperature != null ||
+        request.config.topP != null ||
+        request.config.topK != null;
+    bool includeSampling = false;
+    if (hasSampling) {
+      if (excludeSampling) {
+        _emitAnthropicWarning(
+          'Sampling parameters (temperature, top_p, top_k) are ignored '
+          'because thinking/effort is enabled.',
+        );
+      } else if (_clientRejectsSampling(request)) {
+        _emitAnthropicWarning(
+          'Sampling parameters (temperature, top_p, top_k) are ignored '
+          'because Claude API version 2026-10-21 removed them.',
+        );
+      } else {
+        includeSampling = true;
+      }
+    }
 
     Map<String, Object?>? toolChoice;
     if (outputSchemaTool != null) {
@@ -1548,11 +1615,11 @@ class AnthropicLlm extends BaseLlm {
       'thinking': ?thinking,
       if (effort != null)
         'output_config': <String, Object?>{'effort': effort},
-      if (!excludeSampling && request.config.temperature != null)
+      if (includeSampling && request.config.temperature != null)
         'temperature': request.config.temperature,
-      if (!excludeSampling && request.config.topP != null)
+      if (includeSampling && request.config.topP != null)
         'top_p': request.config.topP,
-      if (!excludeSampling && request.config.topK != null)
+      if (includeSampling && request.config.topK != null)
         'top_k': request.config.topK,
       if (request.config.stopSequences.isNotEmpty)
         'stop_sequences': List<String>.from(request.config.stopSequences),
@@ -1949,6 +2016,39 @@ class AnthropicLlm extends BaseLlm {
         _defaultAnthropicBaseUrl;
   }
 
+  String? _effectiveExplicitApiVersionHeader(LlmRequest request) {
+    final String? requestHeader = _extractAnthropicVersionHeader(
+      request.config.httpOptions?.headers,
+    );
+    if (requestHeader != null) {
+      return requestHeader;
+    }
+    final String? defaultHeader = _extractAnthropicVersionHeader(defaultHeaders);
+    if (defaultHeader != null) {
+      return defaultHeader;
+    }
+    final String? explicitVersion =
+        apiVersion ??
+        request.config.httpOptions?.apiVersion ??
+        (environment ?? readSystemEnvironment())[_anthropicVersionEnv];
+    return explicitVersion?.trim();
+  }
+
+  bool _clientRejectsSampling(LlmRequest request) {
+    // Vertex sends anthropic_version in the body, not as an HTTP header.
+    if (!isVertex) {
+      final String? effectiveVersion = _effectiveExplicitApiVersionHeader(
+        request,
+      );
+      if (effectiveVersion != null &&
+          _apiVersionDateRe.hasMatch(effectiveVersion)) {
+        return effectiveVersion.compareTo(_samplingRemovedApiVersion) >= 0;
+      }
+    }
+    final int? major = sdkMajorVersion ?? anthropicSdkMajorVersionForTest;
+    return major != null && major >= 2;
+  }
+
   String _resolveApiVersion(LlmRequest request) {
     return apiVersion ??
         request.config.httpOptions?.apiVersion ??
@@ -1957,9 +2057,20 @@ class AnthropicLlm extends BaseLlm {
   }
 
   Map<String, String> _resolveHeaders(LlmRequest request) {
-    return Map<String, String>.from(
-      request.config.httpOptions?.headers ?? const <String, String>{},
-    );
+    final Map<String, String> merged = <String, String>{...?defaultHeaders};
+    final Map<String, String>? requestHeaders =
+        request.config.httpOptions?.headers;
+    if (requestHeaders != null && requestHeaders.isNotEmpty) {
+      for (final MapEntry<String, String> entry in requestHeaders.entries) {
+        final String lowerKey = entry.key.toLowerCase();
+        merged.removeWhere(
+          (String existingKey, String _) =>
+              existingKey.toLowerCase() == lowerKey,
+        );
+        merged[entry.key] = entry.value;
+      }
+    }
+    return merged;
   }
 }
 
