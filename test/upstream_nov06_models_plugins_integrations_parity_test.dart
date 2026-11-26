@@ -983,7 +983,7 @@ void main() {
       expect(retryResp, isNotNull);
       expect(
         retryResp!['reflection_guidance'],
-        contains('**Custom Guidance:**\nCheck arg 42 on retry 1/1'),
+        equals('Check arg 42 on retry 1/1'),
       );
 
       final Map<String, dynamic>? exceededResp =
@@ -996,7 +996,7 @@ void main() {
       expect(exceededResp, isNotNull);
       expect(
         exceededResp!['reflection_guidance'],
-        contains('**Custom Guidance:**\nStop calling failing_tool and ask user.'),
+        equals('Stop calling failing_tool and ask user.'),
       );
     });
 

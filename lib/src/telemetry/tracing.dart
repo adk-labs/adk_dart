@@ -28,6 +28,7 @@ import '_experimental_semconv.dart' as experimental_semconv;
 import '_genai_instrumentor.dart';
 
 export '../utils/credential_names.dart';
+export '_agent_engine.dart';
 export '_genai_instrumentor.dart';
 
 /// Environment key controlling whether request and response payloads are

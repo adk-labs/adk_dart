@@ -60,7 +60,7 @@ void main() {
       );
       expect(matcherConfig, isNotNull);
       expect(matcherConfig!.stage, FeatureStage.experimental);
-      expect(matcherConfig.defaultOn, isFalse);
+      expect(matcherConfig.defaultOn, isTrue);
     });
 
     test('ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS suppresses experimental warnings', () {

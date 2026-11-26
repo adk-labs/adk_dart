@@ -119,6 +119,9 @@ enum FeatureName {
   /// Graceful error handling for MCP tool execution.
   mcpGracefulErrorHandling('MCP_GRACEFUL_ERROR_HANDLING'),
 
+  /// Opt-in modern-protocol connect path for MCP SDK 2.x.
+  mcpModernProtocol('MCP_MODERN_PROTOCOL'),
+
   /// Model Context Protocol (MCP) toolset integration.
   mcpToolset('MCP_TOOLSET'),
 
@@ -258,7 +261,7 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.bigQueryToolConfig: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.bigtableToolSettings: const FeatureConfig(
@@ -290,7 +293,7 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.dataAgentToolConfig: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.dataAgentToolset: const FeatureConfig(
@@ -384,6 +387,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         FeatureStage.stable,
         defaultOn: true,
       ),
+      FeatureName.mcpModernProtocol: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: false,
+      ),
       FeatureName.mcpToolset: const FeatureConfig(
         FeatureStage.stable,
         defaultOn: true,
@@ -394,7 +401,7 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
       ),
       FeatureName.mongodbSessionService: const FeatureConfig(
         FeatureStage.experimental,
-        defaultOn: false,
+        defaultOn: true,
       ),
       FeatureName.mongodbToolSettings: const FeatureConfig(
         FeatureStage.experimental,
@@ -465,7 +472,7 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
       ),
       FeatureName.toolArgsMatcher: const FeatureConfig(
         FeatureStage.experimental,
-        defaultOn: false,
+        defaultOn: true,
       ),
       FeatureName.toolConfig: const FeatureConfig(
         FeatureStage.stable,

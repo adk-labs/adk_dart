@@ -141,6 +141,7 @@ class ToolReflectionContext {
   /// Creates a tool reflection context.
   const ToolReflectionContext({
     required this.tool,
+    String? toolName,
     required this.toolArgs,
     required this.toolContext,
     required this.error,
@@ -148,10 +149,16 @@ class ToolReflectionContext {
     required this.errorDetails,
     required this.retryCount,
     required this.maxRetries,
-  });
+    this.defaultGuidance = '',
+  }) : _toolName = toolName;
 
   /// The tool that failed.
   final BaseTool tool;
+
+  final String? _toolName;
+
+  /// Name of the tool that failed.
+  String get toolName => _toolName ?? tool.name;
 
   /// The arguments passed to the tool.
   final Map<String, dynamic> toolArgs;
@@ -173,6 +180,10 @@ class ToolReflectionContext {
 
   /// Maximum retries configured on the plugin.
   final int maxRetries;
+
+  /// The built-in guidance text for this failure, which a provider can return,
+  /// extend, or ignore.
+  final String defaultGuidance;
 }
 
 /// Callback signature for generating custom tool reflection or retry-exceeded guidance.
@@ -213,12 +224,12 @@ class ReflectAndRetryToolPlugin extends BasePlugin {
   /// Scope used for tracking retry counters.
   final TrackingScope trackingScope;
 
-  /// Optional custom guidance (`String` or [ToolGuidanceCallback]) appended to
-  /// retry reflection messages.
+  /// Optional custom guidance (`String` or [ToolGuidanceCallback]) that
+  /// replaces the built-in retry reflection guidance when non-null.
   final Object? reflectionGuidance;
 
-  /// Optional custom guidance (`String` or [ToolGuidanceCallback]) appended to
-  /// retry-exceeded messages.
+  /// Optional custom guidance (`String` or [ToolGuidanceCallback]) that
+  /// replaces the built-in retry-exceeded guidance when non-null.
   final Object? retryExceededGuidance;
 
   final Map<String, Map<String, int>> _scopedFailureCounters =
@@ -435,54 +446,29 @@ class ReflectAndRetryToolPlugin extends BasePlugin {
     if (guidance == null) {
       return null;
     }
-    final String? text;
+    final Object? result;
     if (guidance is String) {
-      text = guidance;
+      return guidance;
     } else if (guidance is ToolGuidanceCallback) {
-      text = await guidance(context);
+      result = await guidance(context);
     } else if (guidance is Function) {
-      final Object? result = await Function.apply(guidance, <Object?>[context]);
-      text = result as String?;
+      result = await Function.apply(guidance, <Object?>[context]);
     } else {
       return null;
     }
-    if (text == null) {
-      return null;
-    }
-    final String trimmed = text.trim();
-    return trimmed.isEmpty ? null : trimmed;
+    return result as String?;
   }
 
-  Future<Map<String, dynamic>> _createToolReflectionResponse(
-    BaseTool tool,
+  String _getDefaultReflectionGuidance(
+    String toolName,
     Map<String, dynamic> toolArgs,
-    ToolContext toolContext,
-    Object error,
+    String errorDetails,
     int retryCount,
-  ) async {
+  ) {
     final String argsSummary = _safeJson(toolArgs);
-    final String errorDetails = _formatErrorDetails(error);
-    final String errorType = _formatErrorType(error);
-    final String? customGuidance = await _resolveGuidance(
-      reflectionGuidance,
-      ToolReflectionContext(
-        tool: tool,
-        toolArgs: Map<String, dynamic>.from(toolArgs),
-        toolContext: toolContext,
-        error: error,
-        errorType: errorType,
-        errorDetails: errorDetails,
-        retryCount: retryCount,
-        maxRetries: maxRetries,
-      ),
-    );
-    final String customSection = customGuidance == null
-        ? ''
-        : '\n\n**Custom Guidance:**\n$customGuidance';
-
     final String reflectionMessage =
         '''
-The call to tool `${tool.name}` failed.
+The call to tool `$toolName` failed.
 
 **Error Details:**
 ```
@@ -501,48 +487,22 @@ This is retry attempt **$retryCount of $maxRetries**. Analyze the error and the 
 2.  **State or Preconditions**: Did a previous step fail or not produce the necessary state/resource for this tool to succeed?
 3.  **Alternative Approach**: Is this the right tool for the job? Could another tool or a different sequence of steps achieve the goal?
 4.  **Simplify the Task**: Can you break the problem down into smaller, simpler steps?
-5.  **Wrong Function Name**: Does the error indicates the tool is not found? Please check again and only use available tools.$customSection
+5.  **Wrong Function Name**: Does the error indicates the tool is not found? Please check again and only use available tools.
 
 Formulate a new plan based on your analysis and try a corrected or different approach.
 ''';
-
-    return ToolFailureResponse(
-      errorType: errorType,
-      errorDetails: '$error',
-      retryCount: retryCount,
-      reflectionGuidance: reflectionMessage.trim(),
-    ).toJson();
+    return reflectionMessage.trim();
   }
 
-  Future<Map<String, dynamic>> _getToolRetryExceedMessage(
-    BaseTool tool,
+  String _getDefaultRetryExceededGuidance(
+    String toolName,
     Map<String, dynamic> toolArgs,
-    ToolContext toolContext,
-    Object error,
-  ) async {
-    final String errorDetails = _formatErrorDetails(error);
-    final String errorType = _formatErrorType(error);
+    String errorDetails,
+  ) {
     final String argsSummary = _safeJson(toolArgs);
-    final String? customGuidance = await _resolveGuidance(
-      retryExceededGuidance,
-      ToolReflectionContext(
-        tool: tool,
-        toolArgs: Map<String, dynamic>.from(toolArgs),
-        toolContext: toolContext,
-        error: error,
-        errorType: errorType,
-        errorDetails: errorDetails,
-        retryCount: maxRetries,
-        maxRetries: maxRetries,
-      ),
-    );
-    final String customSection = customGuidance == null
-        ? ''
-        : '\n\n**Custom Guidance:**\n$customGuidance';
-
     final String reflectionMessage =
         '''
-The tool `${tool.name}` has failed consecutively $maxRetries times and the retry limit has been exceeded.
+The tool `$toolName` has failed consecutively $maxRetries times and the retry limit has been exceeded.
 
 **Last Error:**
 ```
@@ -555,14 +515,86 @@ $argsSummary
 ```
 
 **Final Instruction:**
-**Do not attempt to use the `${tool.name}` tool again for this task.** You must now try a different approach. Acknowledge the failure and devise a new strategy, potentially using other available tools or informing the user that the task cannot be completed.$customSection
+**Do not attempt to use the `$toolName` tool again for this task.** You must now try a different approach. Acknowledge the failure and devise a new strategy, potentially using other available tools or informing the user that the task cannot be completed.
 ''';
+    return reflectionMessage.trim();
+  }
+
+  Future<Map<String, dynamic>> _createToolReflectionResponse(
+    BaseTool tool,
+    Map<String, dynamic> toolArgs,
+    ToolContext toolContext,
+    Object error,
+    int retryCount,
+  ) async {
+    final String errorDetails = _formatErrorDetails(error);
+    final String errorType = _formatErrorType(error);
+    final String defaultGuidance = _getDefaultReflectionGuidance(
+      tool.name,
+      toolArgs,
+      errorDetails,
+      retryCount,
+    );
+    final String? customGuidance = await _resolveGuidance(
+      reflectionGuidance,
+      ToolReflectionContext(
+        tool: tool,
+        toolName: tool.name,
+        toolArgs: Map<String, dynamic>.from(toolArgs),
+        toolContext: toolContext,
+        error: error,
+        errorType: errorType,
+        errorDetails: errorDetails,
+        retryCount: retryCount,
+        maxRetries: maxRetries,
+        defaultGuidance: defaultGuidance,
+      ),
+    );
+    final String resolvedGuidance = customGuidance ?? defaultGuidance;
+
+    return ToolFailureResponse(
+      errorType: errorType,
+      errorDetails: '$error',
+      retryCount: retryCount,
+      reflectionGuidance: resolvedGuidance,
+    ).toJson();
+  }
+
+  Future<Map<String, dynamic>> _getToolRetryExceedMessage(
+    BaseTool tool,
+    Map<String, dynamic> toolArgs,
+    ToolContext toolContext,
+    Object error,
+  ) async {
+    final String errorDetails = _formatErrorDetails(error);
+    final String errorType = _formatErrorType(error);
+    final String defaultGuidance = _getDefaultRetryExceededGuidance(
+      tool.name,
+      toolArgs,
+      errorDetails,
+    );
+    final String? customGuidance = await _resolveGuidance(
+      retryExceededGuidance,
+      ToolReflectionContext(
+        tool: tool,
+        toolName: tool.name,
+        toolArgs: Map<String, dynamic>.from(toolArgs),
+        toolContext: toolContext,
+        error: error,
+        errorType: errorType,
+        errorDetails: errorDetails,
+        retryCount: maxRetries,
+        maxRetries: maxRetries,
+        defaultGuidance: defaultGuidance,
+      ),
+    );
+    final String resolvedGuidance = customGuidance ?? defaultGuidance;
 
     return ToolFailureResponse(
       errorType: errorType,
       errorDetails: '$error',
       retryCount: maxRetries,
-      reflectionGuidance: reflectionMessage.trim(),
+      reflectionGuidance: resolvedGuidance,
     ).toJson();
   }
 
