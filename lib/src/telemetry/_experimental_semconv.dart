@@ -7,6 +7,7 @@ import 'dart:io';
 import '../models/llm_request.dart';
 import '../models/llm_response.dart';
 import '../types/content.dart';
+import 'tracing.dart' show TelemetryConfig;
 
 /// Span attribute writer abstraction used by telemetry helpers.
 abstract class SpanAttributeWriter {
@@ -93,32 +94,93 @@ bool isExperimentalSemconv({Map<String, String>? environment}) {
 /// Content capture mode resolved from environment.
 String getContentCapturingMode({Map<String, String>? environment}) {
   final Map<String, String> env = environment ?? Platform.environment;
-  return (env[otelInstrumentationGenaiCaptureMessageContent] ?? '')
-      .toUpperCase();
+  final String raw = (env[otelInstrumentationGenaiCaptureMessageContent] ?? '')
+      .trim();
+  final String lowered = raw.toLowerCase();
+  if (lowered == 'true' || lowered == '1') {
+    return 'EVENT_ONLY';
+  }
+  return raw.toUpperCase();
+}
+
+List<Map<String, Object?>> _resolveToolDefinitions(
+  List<ToolDeclaration> tools,
+) {
+  final List<Map<String, Object?>> toolDefinitions = <Map<String, Object?>>[];
+  for (final ToolDeclaration tool in tools) {
+    toolDefinitions.addAll(_toolToToolDefinition(tool));
+  }
+  return toolDefinitions;
+}
+
+Map<String, Object?> _buildRequestOperationDetails(
+  LlmRequest llmRequest, {
+  bool reasoning = false,
+}) {
+  final List<Map<String, Object?>> inputMessages = _toInputMessages(
+    llmRequest.contents,
+    reasoning: reasoning,
+  );
+  final List<Map<String, Object?>> systemInstructions = _toSystemInstructions(
+    llmRequest.config.systemInstruction,
+  );
+  final List<Map<String, Object?>> toolDefinitions = _resolveToolDefinitions(
+    llmRequest.config.tools ?? const <ToolDeclaration>[],
+  );
+
+  return <String, Object?>{
+    genAiInputMessages: inputMessages,
+    genAiSystemInstructions: systemInstructions,
+    genAiToolDefinitions: toolDefinitions,
+  };
+}
+
+Map<String, Object?> _buildResponseOperationDetails(
+  LlmResponse llmResponse, {
+  bool reasoning = false,
+}) {
+  final Map<String, Object?>? outputMessage = _toOutputMessage(
+    llmResponse,
+    reasoning: reasoning,
+  );
+  if (outputMessage == null) {
+    return const <String, Object?>{};
+  }
+  return <String, Object?>{
+    genAiOutputMessages: <Map<String, Object?>>[outputMessage],
+  };
 }
 
 /// Extracts operation-details attributes from an LLM request.
 Future<void> setOperationDetailsAttributesFromRequest(
   Map<String, Object?> operationDetailsAttributes,
-  LlmRequest llmRequest,
-) async {
-  final List<Map<String, Object?>> inputMessages = _toInputMessages(
-    llmRequest.contents,
-  );
-  final List<Map<String, Object?>> systemInstructions = _toSystemInstructions(
-    llmRequest.config.systemInstruction,
-  );
-
-  final List<Map<String, Object?>> toolDefinitions = <Map<String, Object?>>[];
-  final List<ToolDeclaration> tools =
-      llmRequest.config.tools ?? const <ToolDeclaration>[];
-  for (final ToolDeclaration tool in tools) {
-    toolDefinitions.addAll(_toolToToolDefinition(tool));
+  LlmRequest llmRequest, {
+  TelemetryConfig? telemetryConfig,
+  bool reasoning = false,
+  Map<String, String>? environment,
+}) async {
+  final bool skipContent =
+      telemetryConfig != null &&
+      !(environment == null
+          ? telemetryConfig.shouldAddContentToLogs
+          : telemetryConfig.resolveShouldAddContentToLogs(
+              environment: environment,
+            )) &&
+      !(environment == null
+          ? telemetryConfig.shouldAddContentToExperimentalSpans
+          : telemetryConfig.resolveShouldAddContentToExperimentalSpans(
+              environment: environment,
+            ));
+  if (skipContent) {
+    operationDetailsAttributes[genAiToolDefinitions] = _resolveToolDefinitions(
+      llmRequest.config.tools ?? const <ToolDeclaration>[],
+    );
+    return;
   }
 
-  operationDetailsAttributes[genAiInputMessages] = inputMessages;
-  operationDetailsAttributes[genAiSystemInstructions] = systemInstructions;
-  operationDetailsAttributes[genAiToolDefinitions] = toolDefinitions;
+  operationDetailsAttributes.addAll(
+    _buildRequestOperationDetails(llmRequest, reasoning: reasoning),
+  );
 }
 
 /// Copies common operation-details attributes.
@@ -126,16 +188,23 @@ void setOperationDetailsCommonAttributes(
   Map<String, Object?> operationDetailsCommonAttributes,
   Map<String, Object?> attributes, {
   Map<String, Object?>? logOnlyAttributes,
+  TelemetryConfig? telemetryConfig,
   Map<String, String>? environment,
 }) {
   operationDetailsCommonAttributes.addAll(attributes);
   if (logOnlyAttributes == null || logOnlyAttributes.isEmpty) {
     return;
   }
-  final String capturingMode = getContentCapturingMode(
-    environment: environment,
-  );
-  if (capturingMode == 'EVENT_ONLY' || capturingMode == 'SPAN_AND_EVENT') {
+  final bool addToLogs = telemetryConfig != null
+      ? telemetryConfig.resolveShouldAddContentToLogs(environment: environment)
+      : (() {
+          final String capturingMode = getContentCapturingMode(
+            environment: environment,
+          );
+          return capturingMode == 'EVENT_ONLY' ||
+              capturingMode == 'SPAN_AND_EVENT';
+        })();
+  if (addToLogs) {
     operationDetailsCommonAttributes.addAll(logOnlyAttributes);
   }
 }
@@ -144,8 +213,9 @@ void setOperationDetailsCommonAttributes(
 void setOperationDetailsAttributesFromResponse(
   LlmResponse llmResponse,
   Map<String, Object?> operationDetailsAttributes,
-  Map<String, Object?> operationDetailsCommonAttributes,
-) {
+  Map<String, Object?> operationDetailsCommonAttributes, {
+  bool reasoning = false,
+}) {
   final String? normalizedFinishReason = _toFinishReason(
     llmResponse.finishReason,
   );
@@ -185,8 +255,13 @@ void setOperationDetailsAttributesFromResponse(
     }
   }
 
-  final Map<String, Object?>? outputMessage = _toOutputMessage(llmResponse);
-  if (outputMessage != null) {
+  final Map<String, Object?> responseAttributes =
+      _buildResponseOperationDetails(llmResponse, reasoning: reasoning);
+  final Object? arrived = responseAttributes[genAiOutputMessages];
+  if (arrived is List && arrived.isNotEmpty && arrived.first is Map) {
+    final Map<String, Object?> outputMessage = Map<String, Object?>.from(
+      arrived.first as Map,
+    );
     final Object? existing = operationDetailsAttributes[genAiOutputMessages];
     if (existing is List && existing.isNotEmpty && existing.first is Map) {
       final Map<String, Object?> existingMsg = Map<String, Object?>.from(
@@ -225,20 +300,37 @@ void maybeLogCompletionDetails(
   CompletionDetailsLogger otelLogger,
   Map<String, Object?> operationDetailsAttributes,
   Map<String, Object?> operationDetailsCommonAttributes, {
+  TelemetryConfig? telemetryConfig,
   Map<String, String>? environment,
 }) {
-  if (span == null || !isExperimentalSemconv(environment: environment)) {
+  if (span == null) {
+    return;
+  }
+  final bool experimentalEnabled = telemetryConfig != null
+      ? telemetryConfig.shouldUseExperimentalGenAiSemconv(
+          environment: environment,
+        )
+      : isExperimentalSemconv(environment: environment);
+  if (!experimentalEnabled) {
     return;
   }
 
   final String capturingMode = getContentCapturingMode(
     environment: environment,
   );
+  final bool addToLogs = telemetryConfig != null
+      ? telemetryConfig.resolveShouldAddContentToLogs(environment: environment)
+      : (capturingMode == 'EVENT_ONLY' || capturingMode == 'SPAN_AND_EVENT');
+  final bool addToSpans = telemetryConfig != null
+      ? telemetryConfig.resolveShouldAddContentToExperimentalSpans(
+          environment: environment,
+        )
+      : (capturingMode == 'SPAN_ONLY' || capturingMode == 'SPAN_AND_EVENT');
   final Map<String, Object?> finalAttributes = Map<String, Object?>.from(
     operationDetailsCommonAttributes,
   );
 
-  if (capturingMode == 'EVENT_ONLY' || capturingMode == 'SPAN_AND_EVENT') {
+  if (addToLogs) {
     finalAttributes.addAll(operationDetailsAttributes);
   } else {
     finalAttributes.addAll(
@@ -253,7 +345,7 @@ void maybeLogCompletionDetails(
     ),
   );
 
-  if (capturingMode == 'SPAN_ONLY' || capturingMode == 'SPAN_AND_EVENT') {
+  if (addToSpans) {
     for (final MapEntry<String, Object?> entry
         in operationDetailsAttributes.entries) {
       span.setAttribute(
@@ -366,14 +458,26 @@ Object? _cleanParameters(Object? parameters) {
   }
 }
 
-List<Map<String, Object?>> _toInputMessages(List<Content> contents) {
-  return contents.map(_toInputMessage).toList(growable: false);
+List<Map<String, Object?>> _toInputMessages(
+  List<Content> contents, {
+  bool reasoning = false,
+}) {
+  return contents
+      .map((Content content) => _toInputMessage(content, reasoning: reasoning))
+      .toList(growable: false);
 }
 
-Map<String, Object?> _toInputMessage(Content content) {
+Map<String, Object?> _toInputMessage(
+  Content content, {
+  bool reasoning = false,
+}) {
   final List<Map<String, Object?>> parts = <Map<String, Object?>>[];
   for (int idx = 0; idx < content.parts.length; idx += 1) {
-    final Map<String, Object?>? part = _toPart(content.parts[idx], idx);
+    final Map<String, Object?>? part = _toPart(
+      content.parts[idx],
+      idx,
+      reasoning: reasoning,
+    );
     if (part != null) {
       parts.add(part);
     }
@@ -382,13 +486,19 @@ Map<String, Object?> _toInputMessage(Content content) {
   return <String, Object?>{'role': _toRole(content.role), 'parts': parts};
 }
 
-Map<String, Object?>? _toOutputMessage(LlmResponse llmResponse) {
+Map<String, Object?>? _toOutputMessage(
+  LlmResponse llmResponse, {
+  bool reasoning = false,
+}) {
   final Content? content = llmResponse.content;
   if (content == null) {
     return null;
   }
 
-  final Map<String, Object?> message = _toInputMessage(content);
+  final Map<String, Object?> message = _toInputMessage(
+    content,
+    reasoning: reasoning,
+  );
   return <String, Object?>{
     'role': message['role'],
     'parts': message['parts'],
@@ -396,7 +506,11 @@ Map<String, Object?>? _toOutputMessage(LlmResponse llmResponse) {
   };
 }
 
-Map<String, Object?>? _toPart(Part part, int idx) {
+Map<String, Object?>? _toPart(
+  Part part,
+  int idx, {
+  bool reasoning = false,
+}) {
   String fallbackId(String? name) {
     if (name != null && name.isNotEmpty) {
       return '${name}_$idx';
@@ -405,6 +519,9 @@ Map<String, Object?>? _toPart(Part part, int idx) {
   }
 
   if (part.text != null) {
+    if (reasoning && part.thought) {
+      return <String, Object?>{'content': part.text, 'type': 'reasoning'};
+    }
     return <String, Object?>{'content': part.text, 'type': 'text'};
   }
 

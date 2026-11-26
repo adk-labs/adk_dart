@@ -1042,11 +1042,18 @@ Future<T> useInferenceSpan<T>(
       await experimental_semconv.setOperationDetailsAttributesFromRequest(
         gcSpan.operationDetailsAttributes,
         llmRequest,
+        telemetryConfig: telemetryConfig,
+        reasoning: telemetryConfig.isExperimentalFeatureEnabled(
+          'reasoning',
+          environment: environment,
+        ),
+        environment: environment,
       );
       experimental_semconv.setOperationDetailsCommonAttributes(
         gcSpan.operationDetailsCommonAttributes,
         commonAttributes,
         logOnlyAttributes: logOnlyCommonAttributes,
+        telemetryConfig: telemetryConfig,
         environment: environment,
       );
     } else {
@@ -1118,6 +1125,13 @@ Future<T> useInferenceSpan<T>(
       finishReasons: finishReasons.isEmpty ? null : finishReasons,
       error: effectiveError,
     );
+    recordClientInferenceDuration(
+      elapsedS: elapsedSeconds,
+      llmRequest: llmRequest,
+      responses: gcSpan.responses,
+      error: effectiveError,
+      environment: environment,
+    );
     if (shouldEmitInferenceTokenMetrics(
       system: systemName,
       hasGenAiInstrumentor: hasGenAiInst,
@@ -1152,6 +1166,7 @@ Future<T> useInferenceSpan<T>(
         otelLogger,
         gcSpan.operationDetailsAttributes,
         gcSpan.operationDetailsCommonAttributes,
+        telemetryConfig: telemetryConfig,
         environment: environment,
       );
     }
@@ -1368,18 +1383,18 @@ void traceInferenceResult(
     llmResponse.cacheMetadata,
     environment: environment,
   );
+  final TelemetryConfig telemetryConfig = effectiveInvocationContext != null
+      ? telemetryConfigFromInvocationContext(effectiveInvocationContext)
+      : const TelemetryConfig();
   _setGroundingAttributes(
     targetSpan,
     llmResponse.groundingMetadata,
-    captureContent: _shouldAddContentToExperimentalSpans(
+    captureContent: telemetryConfig.resolveShouldAddContentToExperimentalSpans(
       environment: environment,
     ),
     environment: environment,
   );
 
-  final TelemetryConfig telemetryConfig = effectiveInvocationContext != null
-      ? telemetryConfigFromInvocationContext(effectiveInvocationContext)
-      : const TelemetryConfig();
   if (telemetryConfig.shouldUseExperimentalGenAiSemconv(
         environment: environment,
       ) &&
@@ -1388,6 +1403,10 @@ void traceInferenceResult(
       llmResponse,
       generateContentSpan.operationDetailsAttributes,
       generateContentSpan.operationDetailsCommonAttributes,
+      reasoning: telemetryConfig.isExperimentalFeatureEnabled(
+        'reasoning',
+        environment: environment,
+      ),
     );
     if (finishReason != null && finishReason.isNotEmpty) {
       generateContentSpan.endInference();
@@ -2690,17 +2709,56 @@ TelemetryConfig telemetryConfigFromInvocationContext(
   return runConfig.telemetry ?? const TelemetryConfig();
 }
 
+/// Mirror of OpenTelemetry GenAI content-capturing modes.
+enum ContentCapturingMode {
+  /// No content captured (matches empty env value).
+  noContent('NO_CONTENT'),
+
+  /// Content on the emitted log record only.
+  eventOnly('EVENT_ONLY'),
+
+  /// Content on the active span only.
+  spanOnly('SPAN_ONLY'),
+
+  /// Content on both the log record and the active span.
+  spanAndEvent('SPAN_AND_EVENT');
+
+  /// Creates a [ContentCapturingMode] with its canonical [value].
+  const ContentCapturingMode(this.value);
+
+  /// Canonical uppercase string value.
+  final String value;
+}
+
 /// Configuration for telemetry capture behavior.
 class TelemetryConfig {
   /// Creates a [TelemetryConfig].
   const TelemetryConfig({
     this.captureMessageContent = true,
+    this.contentCapturingMode,
     this.useExperimentalSemconv = false,
     this.genaiSemconvStabilityOptIn,
+    this.adkExperimentalTelemetryOptIn,
+    this.experimentalFeaturesOptIn,
   });
+
+  /// Recognized experimental telemetry feature names.
+  static const Set<String> recognizedExperimentalFeatures = <String>{
+    'skills',
+    'workflow',
+    'context_cache',
+    'grounding',
+    'mcp',
+    'token_usage',
+    'compaction',
+    'reasoning',
+  };
 
   /// Whether message and tool content payloads are captured on spans/logs.
   final bool captureMessageContent;
+
+  /// Optional per-request override for `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`.
+  final ContentCapturingMode? contentCapturingMode;
 
   /// Whether OpenTelemetry GenAI experimental semantic conventions are enabled.
   final bool useExperimentalSemconv;
@@ -2709,13 +2767,114 @@ class TelemetryConfig {
   /// (for example `'stable'` or `'gen_ai_latest_experimental'`).
   final String? genaiSemconvStabilityOptIn;
 
+  /// Optional per-request override for `ADK_EXPERIMENTAL_TELEMETRY`.
+  final bool? adkExperimentalTelemetryOptIn;
+
+  /// Optional per-request override for `ADK_EXPERIMENTAL_TELEMETRY_FEATURES`.
+  final Set<String>? experimentalFeaturesOptIn;
+
+  bool _isIgnorePerRequest({Map<String, String>? environment}) {
+    final Map<String, String> env = environment ?? Platform.environment;
+    final String ignoreRunConfig =
+        (env['ADK_TELEMETRY_IGNORE_RUN_CONFIG'] ?? '').trim().toLowerCase();
+    return ignoreRunConfig == '1' || ignoreRunConfig == 'true';
+  }
+
+  /// Resolves the effective [ContentCapturingMode] under [environment].
+  ContentCapturingMode resolveContentCapturingMode({
+    Map<String, String>? environment,
+  }) {
+    if (!_isIgnorePerRequest(environment: environment)) {
+      if (contentCapturingMode != null) {
+        return contentCapturingMode!;
+      }
+      if (!captureMessageContent) {
+        return ContentCapturingMode.noContent;
+      }
+    }
+    final String envMode = experimental_semconv.getContentCapturingMode(
+      environment: environment,
+    );
+    switch (envMode) {
+      case 'EVENT_ONLY':
+        return ContentCapturingMode.eventOnly;
+      case 'SPAN_ONLY':
+        return ContentCapturingMode.spanOnly;
+      case 'SPAN_AND_EVENT':
+        return ContentCapturingMode.spanAndEvent;
+      default:
+        return ContentCapturingMode.noContent;
+    }
+  }
+
+  /// Effective [ContentCapturingMode] under `Platform.environment`.
+  ContentCapturingMode get resolvedContentCapturingMode =>
+      resolveContentCapturingMode();
+
+  /// Whether content should be added to emitted log records under [environment].
+  bool resolveShouldAddContentToLogs({Map<String, String>? environment}) {
+    final ContentCapturingMode mode = resolveContentCapturingMode(
+      environment: environment,
+    );
+    return mode == ContentCapturingMode.eventOnly ||
+        mode == ContentCapturingMode.spanAndEvent;
+  }
+
+  /// Whether content should be added to emitted log records (`EVENT_ONLY` / `SPAN_AND_EVENT`).
+  bool get shouldAddContentToLogs => resolveShouldAddContentToLogs();
+
+  /// Whether content should be added to experimental spans under [environment].
+  bool resolveShouldAddContentToExperimentalSpans({
+    Map<String, String>? environment,
+  }) {
+    final ContentCapturingMode mode = resolveContentCapturingMode(
+      environment: environment,
+    );
+    return mode == ContentCapturingMode.spanOnly ||
+        mode == ContentCapturingMode.spanAndEvent;
+  }
+
+  /// Whether content should be added to experimental spans (`SPAN_ONLY` / `SPAN_AND_EVENT`).
+  bool get shouldAddContentToExperimentalSpans =>
+      resolveShouldAddContentToExperimentalSpans();
+
+  /// Whether the named experimental [feature] is enabled under [environment].
+  bool isExperimentalFeatureEnabled(
+    String feature, {
+    Map<String, String>? environment,
+  }) {
+    final String normalizedFeature = feature.trim().toLowerCase();
+    if (!recognizedExperimentalFeatures.contains(normalizedFeature)) {
+      return false;
+    }
+    if (!_isIgnorePerRequest(environment: environment)) {
+      if (adkExperimentalTelemetryOptIn != null) {
+        return adkExperimentalTelemetryOptIn!;
+      }
+      if (experimentalFeaturesOptIn != null) {
+        final Set<String> normalized = <String>{
+          for (final String token in experimentalFeaturesOptIn!)
+            if (recognizedExperimentalFeatures.contains(
+              token.trim().toLowerCase(),
+            ))
+              token.trim().toLowerCase(),
+        };
+        if (normalized.isNotEmpty) {
+          return normalized.contains(normalizedFeature);
+        }
+      }
+    }
+    return _isExperimentalTelemetryOptedIn(
+      normalizedFeature,
+      environment: environment,
+    );
+  }
+
   /// Resolves whether experimental GenAI semantic conventions apply for this
   /// configuration under [environment].
   bool shouldUseExperimentalGenAiSemconv({Map<String, String>? environment}) {
     final Map<String, String> env = environment ?? Platform.environment;
-    final String ignoreRunConfig =
-        (env['ADK_TELEMETRY_IGNORE_RUN_CONFIG'] ?? '').trim().toLowerCase();
-    if (ignoreRunConfig != '1' && ignoreRunConfig != 'true') {
+    if (!_isIgnorePerRequest(environment: env)) {
       if (genaiSemconvStabilityOptIn != null) {
         final Set<String> tokens = genaiSemconvStabilityOptIn!
             .split(',')

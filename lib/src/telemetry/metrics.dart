@@ -3,6 +3,7 @@ library;
 
 import 'dart:convert';
 
+import '../errors/tool_execution_error.dart';
 import '../events/event.dart';
 import '../models/cache_metadata.dart';
 import '../models/llm_request.dart';
@@ -37,6 +38,14 @@ const String genAiToolExecutionDurationMetric =
 /// Metric name for client operation durations.
 const String genAiClientOperationDurationMetric =
     'gen_ai.client.operation.duration';
+
+/// Metric name for client inference durations.
+const String genAiClientInferenceDurationMetricName =
+    'gen_ai.client.inference.duration';
+
+/// Alias for [genAiClientInferenceDurationMetricName].
+const String genAiClientInferenceDurationMetric =
+    genAiClientInferenceDurationMetricName;
 
 /// Metric name for agent request sizes.
 const String genAiAgentRequestSizeMetric = 'gen_ai.agent.request.size';
@@ -378,9 +387,39 @@ void recordClientOperationDuration(
           'gen_ai.response.finish_reasons': List<String>.unmodifiable(
             finishReasons,
           ),
-        if (error != null)
-          'error.type': error is String ? error : error.runtimeType.toString(),
+        if (error != null) 'error.type': _resolveMetricErrorType(error),
       },
+      explicitBucketBoundariesAdvisory: operationDurationBucketBounds,
+    ),
+  );
+}
+
+/// Records `gen_ai.client.inference.duration`.
+void recordClientInferenceDuration({
+  required double elapsedS,
+  required LlmRequest llmRequest,
+  required List<LlmResponse> responses,
+  Object? error,
+  Map<String, String>? environment,
+  AdkMetricsRecorder? recorder,
+}) {
+  final LlmResponse? lastResponse = responses.isEmpty ? null : responses.last;
+  final Map<String, Object?> attrs = _inferenceAttributes(
+    llmRequest,
+    lastResponse,
+    environment: environment,
+  );
+  if (error != null) {
+    attrs['error.type'] = _resolveMetricErrorType(error);
+  }
+  _record(
+    recorder,
+    AdkMetricRecord(
+      name: genAiClientInferenceDurationMetricName,
+      value: elapsedS,
+      unit: 's',
+      description: 'GenAI client inference operation duration.',
+      attributes: attrs,
       explicitBucketBoundariesAdvisory: operationDurationBucketBounds,
     ),
   );
@@ -1417,30 +1456,15 @@ void recordSemconvInferenceTokenUsage({
     );
   }
 
-  final Map<String, Object?> inferenceAttrs = <String, Object?>{
-    'gen_ai.operation.name': 'generate_content',
-    'gen_ai.provider.name': resolveGenAiProviderName(
-      llmRequest.model,
-      environment: environment,
-    ),
-    if (llmRequest.model != null && llmRequest.model!.isNotEmpty)
-      'gen_ai.request.model': llmRequest.model,
-  };
-  if (lastResponse != null) {
-    final String? responseModel =
-        (lastResponse.modelVersion != null &&
-            lastResponse.modelVersion!.isNotEmpty)
-        ? lastResponse.modelVersion
-        : llmRequest.model;
-    if (responseModel != null && responseModel.isNotEmpty) {
-      inferenceAttrs['gen_ai.response.model'] = responseModel;
-    }
-  }
+  final Map<String, Object?> inferenceAttrs = _inferenceAttributes(
+    llmRequest,
+    lastResponse,
+    environment: environment,
+  );
 
   final Map<String, Object?> histogramAttrs = <String, Object?>{
     ...inferenceAttrs,
-    if (error != null)
-      'error.type': error is String ? error : error.runtimeType.toString(),
+    if (error != null) 'error.type': _resolveMetricErrorType(error),
   };
 
   _record(
@@ -1647,6 +1671,45 @@ Map<String, String> get _safeMetricsEnvironment {
 
 void _record(AdkMetricsRecorder? recorder, AdkMetricRecord metric) {
   (recorder ?? _globalAdkMetricsRecorder).record(metric);
+}
+
+String _resolveMetricErrorType(Object error) {
+  if (error is String) {
+    return error;
+  }
+  if (error is ToolExecutionError &&
+      error.errorType != null &&
+      error.errorType!.isNotEmpty) {
+    return error.errorType!;
+  }
+  return error.runtimeType.toString();
+}
+
+Map<String, Object?> _inferenceAttributes(
+  LlmRequest llmRequest,
+  LlmResponse? lastResponse, {
+  Map<String, String>? environment,
+}) {
+  final Map<String, Object?> attrs = <String, Object?>{
+    'gen_ai.operation.name': 'generate_content',
+    'gen_ai.provider.name': resolveGenAiProviderName(
+      llmRequest.model,
+      environment: environment,
+    ),
+    if (llmRequest.model != null && llmRequest.model!.isNotEmpty)
+      'gen_ai.request.model': llmRequest.model,
+  };
+  if (lastResponse != null) {
+    final String? responseModel =
+        (lastResponse.modelVersion != null &&
+            lastResponse.modelVersion!.isNotEmpty)
+        ? lastResponse.modelVersion
+        : llmRequest.model;
+    if (responseModel != null && responseModel.isNotEmpty) {
+      attrs['gen_ai.response.model'] = responseModel;
+    }
+  }
+  return attrs;
 }
 
 Map<String, Object?> _agentAttributes(String agentName, {Object? error}) {
