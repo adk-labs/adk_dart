@@ -400,6 +400,7 @@ abstract class BaseAgent {
             name: resolveCallbackName(callback),
           ),
           () => callback(callbackContext),
+          callbackContext: callbackContext,
         );
         if (value != null) {
           callbackContent = value;
@@ -446,6 +447,7 @@ abstract class BaseAgent {
             name: resolveCallbackName(callback),
           ),
           () => callback(callbackContext),
+          callbackContext: callbackContext,
         );
         if (value != null) {
           callbackContent = value;

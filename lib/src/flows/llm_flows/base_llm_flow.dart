@@ -2097,6 +2097,7 @@ class BaseLlmFlow {
             name: resolveCallbackName(callback),
           ),
           () => callback(callbackContext, request, cancelled),
+          callbackContext: callbackContext,
         );
       } catch (_) {
         // Ignore callback errors during cancellation cleanup.
@@ -2132,6 +2133,7 @@ class BaseLlmFlow {
           name: resolveCallbackName(callback),
         ),
         () => callback(callbackContext, request),
+        callbackContext: callbackContext,
       );
       if (response != null) {
         return response;
@@ -2178,6 +2180,7 @@ class BaseLlmFlow {
           name: resolveCallbackName(callback),
         ),
         () => callback(callbackContext, response),
+        callbackContext: callbackContext,
       );
       if (altered != null) {
         final LlmResponse? withGrounding = await _maybeAddGroundingMetadata(
@@ -2289,6 +2292,7 @@ class BaseLlmFlow {
           name: resolveCallbackName(callback),
         ),
         () => callback(callbackContext, request, error),
+        callbackContext: callbackContext,
       );
       if (handled != null) {
         return handled;
@@ -2355,17 +2359,16 @@ class BaseLlmFlow {
       }
       final BaseTool tool = toolsDict[name]!;
       String? title;
-      final Object? metaTitle = tool.customMetadata?['title'];
-      if (metaTitle is String && metaTitle.isNotEmpty) {
-        title = metaTitle;
+      final String? directTitle = tool.title?.trim();
+      if (directTitle != null && directTitle.isNotEmpty) {
+        title = directTitle;
       } else {
-        try {
-          final Object? dynamicTitle = (tool as dynamic).title;
-          if (dynamicTitle is String && dynamicTitle.isNotEmpty) {
-            title = dynamicTitle;
+        final Object? metaTitle = tool.customMetadata?['title'];
+        if (metaTitle is String) {
+          final String trimmedMeta = metaTitle.trim();
+          if (trimmedMeta.isNotEmpty) {
+            title = trimmedMeta;
           }
-        } catch (_) {
-          // Tool does not define a `.title` getter.
         }
       }
       if (title != null && title.isNotEmpty) {
@@ -2373,9 +2376,19 @@ class BaseLlmFlow {
       }
     }
     if (displayNames.isNotEmpty) {
-      modelResponseEvent.customMetadata ??= <String, dynamic>{};
-      modelResponseEvent.customMetadata![toolDisplayNamesMetadataKey] =
-          displayNames;
+      final Map<String, dynamic> customMetadata =
+          modelResponseEvent.customMetadata != null
+          ? Map<String, dynamic>.from(modelResponseEvent.customMetadata!)
+          : <String, dynamic>{};
+      final Object? rawExisting = customMetadata[toolDisplayNamesMetadataKey];
+      final Map<String, Object?> existingNames = rawExisting is Map
+          ? rawExisting.map((Object? k, Object? v) => MapEntry('$k', v))
+          : <String, Object?>{};
+      customMetadata[toolDisplayNamesMetadataKey] = <String, Object?>{
+        ...existingNames,
+        ...displayNames,
+      };
+      modelResponseEvent.customMetadata = customMetadata;
     }
   }
 

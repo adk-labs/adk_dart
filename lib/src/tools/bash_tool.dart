@@ -103,6 +103,9 @@ void setResourceLimits(BashToolPolicy policy, [SetRlimitFn? setrlimit]) {
   }
 }
 
+/// Builds the `ulimit` shell prefix string for [policy].
+String buildUlimitPrefix(BashToolPolicy policy) => _buildUlimitPrefix(policy);
+
 String _buildUlimitPrefix(BashToolPolicy policy) {
   if (Platform.isWindows) {
     return '';
@@ -114,12 +117,17 @@ String _buildUlimitPrefix(BashToolPolicy policy) {
         : ((policy.maxFileSizeBytes! + 511) ~/ 512);
     commands.add('ulimit -S -H -f $blocks 2>/dev/null || ulimit -f $blocks');
   }
-  if (policy.maxMemoryBytes != null && policy.maxMemoryBytes! > 0) {
-    final int kb = (policy.maxMemoryBytes! + 1023) ~/ 1024;
+  if (policy.maxMemoryBytes != null) {
+    final int kb = policy.maxMemoryBytes! <= 0
+        ? 0
+        : ((policy.maxMemoryBytes! + 1023) ~/ 1024);
     commands.add('ulimit -v $kb 2>/dev/null || true');
   }
-  if (policy.maxChildProcesses != null && policy.maxChildProcesses! > 0) {
-    commands.add('ulimit -u ${policy.maxChildProcesses!} 2>/dev/null || true');
+  if (policy.maxChildProcesses != null) {
+    final int nproc = policy.maxChildProcesses! < 0
+        ? 0
+        : policy.maxChildProcesses!;
+    commands.add('ulimit -u $nproc 2>/dev/null || true');
   }
   return '${commands.join('; ')}; ';
 }

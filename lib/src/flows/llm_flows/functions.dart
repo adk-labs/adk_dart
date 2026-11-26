@@ -721,6 +721,7 @@ Future<Event?> _runToolExecutionPipeline({
               name: resolveCallbackName(callback),
             ),
             () => callback(tool, functionArgs, toolContext),
+            callbackContext: toolContext,
           );
       if (invocationContext.isAborted || (callState?.cancelled ?? false)) {
         return null;
@@ -914,6 +915,7 @@ Future<Event?> _runToolExecutionPipeline({
               name: resolveCallbackName(callback),
             ),
             () => callback(tool, functionArgs, toolContext, functionResponse!),
+            callbackContext: toolContext,
           );
       if (invocationContext.isAborted || (callState?.cancelled ?? false)) {
         return null;
@@ -979,6 +981,7 @@ Future<void> notifyToolCancelled({
           toolContext: toolContext,
           error: cancellationError,
         ),
+        callbackContext: toolContext,
       );
     } catch (_) {}
   }
@@ -996,6 +999,7 @@ Future<void> notifyToolCancelled({
           name: resolveCallbackName(callback),
         ),
         () => callback(tool, toolArgs, toolContext, cancellationError),
+        callbackContext: toolContext,
       );
     } catch (_) {}
   }
@@ -1040,6 +1044,7 @@ Future<Map<String, dynamic>?> _runOnToolErrorCallbacks({
             name: resolveCallbackName(callback),
           ),
           () => callback(tool, toolArgs, toolContext, error),
+          callbackContext: toolContext,
         );
     if (invocationContext.isAborted) {
       return null;
@@ -1903,6 +1908,7 @@ Future<Map<String, dynamic>?> _runLiveBeforeToolCallbacks({
             name: resolveCallbackName(callback),
           ),
           () => callback(tool, functionArgs, toolContext),
+          callbackContext: toolContext,
         );
     if (isCancelled()) {
       return null;
@@ -1949,6 +1955,7 @@ Future<Map<String, dynamic>?> _runLiveAfterToolCallbacks({
             name: resolveCallbackName(callback),
           ),
           () => callback(tool, functionArgs, toolContext, functionResponse),
+          callbackContext: toolContext,
         );
     if (isCancelled()) {
       return null;

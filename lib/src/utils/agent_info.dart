@@ -115,6 +115,16 @@ Iterable<Object> _iterStaticChildren(Object node) {
   if (node is Workflow) {
     return <Object>[...node.subAgents, ...node.nodes];
   }
+  if (node is LlmAgent) {
+    return <Object>[
+      ...node.subAgents,
+      for (final Object tool in node.tools)
+        if (tool is NodeTool)
+          tool.node
+        else if (tool is BaseNode)
+          tool,
+    ];
+  }
   if (node is BaseAgent) {
     return node.subAgents;
   }

@@ -11,56 +11,57 @@ typedef CallbackContext = Context;
 /// Identifies the lifecycle stage of an executing callback.
 enum CallbackType {
   /// Invoked before an agent runs.
-  beforeAgent('before_agent_callback'),
+  beforeAgent('before_agent'),
 
   /// Invoked after an agent finishes running.
-  afterAgent('after_agent_callback'),
+  afterAgent('after_agent'),
 
   /// Invoked before a model request is sent.
-  beforeModel('before_model_callback'),
+  beforeModel('before_model'),
 
   /// Invoked after a model response is received.
-  afterModel('after_model_callback'),
+  afterModel('after_model'),
 
   /// Invoked when a model call throws an error.
-  onModelError('on_model_error_callback'),
+  onModelError('on_model_error'),
 
   /// Invoked before a tool is executed.
-  beforeTool('before_tool_callback'),
+  beforeTool('before_tool'),
 
   /// Invoked after a tool finishes executing.
-  afterTool('after_tool_callback'),
+  afterTool('after_tool'),
 
   /// Invoked when a tool execution throws an error.
-  onToolError('on_tool_error_callback'),
+  onToolError('on_tool_error'),
 
   /// Invoked when an agent execution throws an error.
-  onAgentError('on_agent_error_callback'),
+  onAgentError('on_agent_error'),
 
   /// Invoked when a user message is received by a plugin.
-  onUserMessage('on_user_message_callback'),
+  onUserMessage('on_user_message'),
 
   /// Invoked before a runner invocation starts.
-  beforeRun('before_run_callback'),
+  beforeRun('before_run'),
 
   /// Invoked after a runner invocation completes.
-  afterRun('after_run_callback'),
+  afterRun('after_run'),
 
   /// Invoked when an event is emitted during a runner invocation.
-  onEvent('on_event_callback'),
+  onEvent('on_event'),
 
   /// Invoked when a runner invocation encounters an unhandled error.
-  onRunError('on_run_error_callback');
+  onRunError('on_run_error');
 
   const CallbackType(this.value);
 
   /// The canonical snake_case name of the callback hook.
   final String value;
 
-  /// Looks up a [CallbackType] by its [value], or returns `null` if unknown.
+  /// Looks up a [CallbackType] by its canonical [value] or `_callback`-suffixed
+  /// alias, or returns `null` if unknown.
   static CallbackType? fromValue(String value) {
     for (final CallbackType type in CallbackType.values) {
-      if (type.value == value) {
+      if (type.value == value || '${type.value}_callback' == value) {
         return type;
       }
     }
@@ -126,14 +127,27 @@ String resolveCallbackName(Object callback, {String fallback = '<anonymous>'}) {
   return callback.runtimeType.toString();
 }
 
-/// Runs [fn] within a [Zone] bound to [info] so [Context.callbackInfo] resolves.
+/// Runs [fn] within a [Zone] bound to [info] and binds [callbackContext]'s
+/// scoped [Context.callbackInfo] when provided.
 Future<T> runWithCallbackScope<T>(
   CallbackInfo info,
-  FutureOr<T> Function() fn,
-) {
-  return runZoned(
-    () async => await fn(),
-    zoneValues: <Object?, Object?>{_callbackScopeZoneKey: info},
-  );
+  FutureOr<T> Function() fn, {
+  Context? callbackContext,
+}) async {
+  if (callbackContext == null) {
+    return runZoned(
+      () async => await fn(),
+      zoneValues: <Object?, Object?>{_callbackScopeZoneKey: info},
+    );
+  }
+  final CallbackInfo? previous = callbackContext.swapCallbackInfo(info);
+  try {
+    return await runZoned(
+      () async => await fn(),
+      zoneValues: <Object?, Object?>{_callbackScopeZoneKey: info},
+    );
+  } finally {
+    callbackContext.swapCallbackInfo(previous);
+  }
 }
 

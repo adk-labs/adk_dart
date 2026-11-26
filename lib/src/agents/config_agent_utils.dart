@@ -152,7 +152,23 @@ const Set<String> _blockedConfigModules = <String>{
   'dart:isolate',
   'dart:ffi',
   'dart:mirrors',
+  'ruamel',
+  'yaml',
+  'anyio',
+  'click',
+  'dotenv',
+  'graphviz',
+  'uvicorn',
+  'watchdog',
 };
+
+const List<String> _blockedConfigModulePrefixes = <String>[
+  'google.adk.cli',
+  'pydantic._internal',
+  'pydantic.v1',
+  'adk_dart.cli',
+  'package:adk_dart/cli',
+];
 
 void _enforceYamlKeyDenylist(Object? node, {String path = '<root>'}) {
   if (node is Map) {
@@ -202,6 +218,12 @@ void _validateSymbolReference(String name) {
       _blockedConfigModules.contains(topLevel) ||
       _blockedConfigModules.any(
         (String blocked) => trimmed.startsWith('$blocked.'),
+      ) ||
+      _blockedConfigModulePrefixes.any(
+        (String prefix) =>
+            trimmed == prefix ||
+            trimmed.startsWith('$prefix.') ||
+            trimmed.startsWith('$prefix/'),
       )) {
     throw ArgumentError(
       "Module or symbol '$name' is not allowed in declarative agent configs.",

@@ -117,6 +117,7 @@ class _PrefixedTool extends BaseTool {
     : super(
         name: '${prefix}_${delegate.name}',
         description: delegate.description,
+        title: delegate.title,
         isLongRunning: delegate.isLongRunning,
         defersResponse: delegate.defersResponse,
         customMetadata: delegate.customMetadata == null

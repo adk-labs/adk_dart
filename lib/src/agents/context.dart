@@ -59,6 +59,8 @@ class Context extends ReadonlyContext {
   /// Current tool confirmation payload, if present.
   ToolConfirmation? toolConfirmation;
 
+  CallbackInfo? _callbackInfo;
+
   /// Mutable session state for this invocation.
   @override
   State get state => _state;
@@ -67,7 +69,17 @@ class Context extends ReadonlyContext {
   String? get branch => invocationContext.branch;
 
   /// Metadata about the currently executing callback, or `null` when not in a callback scope.
-  CallbackInfo? get callbackInfo => currentCallbackInfo;
+  CallbackInfo? get callbackInfo => _callbackInfo;
+
+  /// Replaces the scoped callback metadata on this context and returns the
+  /// previous value.
+  ///
+  /// Intended for internal use by [runWithCallbackScope].
+  CallbackInfo? swapCallbackInfo(CallbackInfo? info) {
+    final CallbackInfo? previous = _callbackInfo;
+    _callbackInfo = info;
+    return previous;
+  }
 
   /// Buffered actions collected during this invocation.
   EventActions get actions {

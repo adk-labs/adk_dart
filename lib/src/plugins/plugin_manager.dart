@@ -47,6 +47,7 @@ class PluginManager {
   Future<T?> _runCallbacks<T>({
     required String callbackName,
     required Future<T?> Function(BasePlugin plugin) invoke,
+    CallbackContext? callbackContext,
   }) async {
     final CallbackType? callbackType = CallbackType.fromValue(callbackName);
     for (final BasePlugin plugin in _plugins) {
@@ -60,6 +61,7 @@ class PluginManager {
                   pluginName: plugin.name,
                 ),
                 () => invoke(plugin),
+                callbackContext: callbackContext,
               );
         if (result != null) {
           return result;
@@ -177,6 +179,7 @@ class PluginManager {
   }) async {
     return _runCallbacks<Content>(
       callbackName: 'before_agent_callback',
+      callbackContext: callbackContext,
       invoke: (BasePlugin plugin) {
         return plugin.beforeAgentCallback(
           agent: agent,
@@ -193,6 +196,7 @@ class PluginManager {
   }) async {
     return _runCallbacks<Content>(
       callbackName: 'after_agent_callback',
+      callbackContext: callbackContext,
       invoke: (BasePlugin plugin) {
         return plugin.afterAgentCallback(
           agent: agent,
@@ -209,6 +213,7 @@ class PluginManager {
   }) async {
     return _runCallbacks<LlmResponse>(
       callbackName: 'before_model_callback',
+      callbackContext: callbackContext,
       invoke: (BasePlugin plugin) {
         return plugin.beforeModelCallback(
           callbackContext: callbackContext,
@@ -225,6 +230,7 @@ class PluginManager {
   }) async {
     return _runCallbacks<LlmResponse>(
       callbackName: 'after_model_callback',
+      callbackContext: callbackContext,
       invoke: (BasePlugin plugin) {
         return plugin.afterModelCallback(
           callbackContext: callbackContext,
@@ -242,6 +248,7 @@ class PluginManager {
   }) async {
     return _runCallbacks<LlmResponse>(
       callbackName: 'on_model_error_callback',
+      callbackContext: callbackContext,
       invoke: (BasePlugin plugin) {
         return plugin.onModelErrorCallback(
           callbackContext: callbackContext,
@@ -260,6 +267,7 @@ class PluginManager {
   }) async {
     return _runCallbacks<Map<String, dynamic>>(
       callbackName: 'before_tool_callback',
+      callbackContext: toolContext,
       invoke: (BasePlugin plugin) {
         return plugin.beforeToolCallback(
           tool: tool,
@@ -279,6 +287,7 @@ class PluginManager {
   }) async {
     return _runCallbacks<Map<String, dynamic>>(
       callbackName: 'after_tool_callback',
+      callbackContext: toolContext,
       invoke: (BasePlugin plugin) {
         return plugin.afterToolCallback(
           tool: tool,
@@ -299,6 +308,7 @@ class PluginManager {
   }) async {
     return _runCallbacks<Map<String, dynamic>>(
       callbackName: 'on_tool_error_callback',
+      callbackContext: toolContext,
       invoke: (BasePlugin plugin) {
         return plugin.onToolErrorCallback(
           tool: tool,
@@ -323,6 +333,7 @@ class PluginManager {
         callbackContext: callbackContext,
         error: error,
       ),
+      callbackContext: callbackContext,
     );
   }
 
@@ -348,8 +359,9 @@ class PluginManager {
   /// every plugin gets notified.
   Future<void> _runNotificationCallbacks(
     String callbackName,
-    Future<void> Function(BasePlugin plugin) invoke,
-  ) async {
+    Future<void> Function(BasePlugin plugin) invoke, {
+    CallbackContext? callbackContext,
+  }) async {
     final CallbackType? callbackType = CallbackType.fromValue(callbackName);
     for (final BasePlugin plugin in _plugins) {
       try {
@@ -363,6 +375,7 @@ class PluginManager {
               pluginName: plugin.name,
             ),
             () => invoke(plugin),
+            callbackContext: callbackContext,
           );
         }
       } catch (_) {

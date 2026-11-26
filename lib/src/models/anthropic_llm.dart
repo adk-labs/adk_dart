@@ -1605,7 +1605,7 @@ class AnthropicLlm extends BaseLlm {
     } else if (tools.isNotEmpty || request.toolsDict.isNotEmpty) {
       toolChoice = _buildToolChoice(
         request.config,
-        forcedToolUseBlocked: thinking != null,
+        forcedToolUseBlocked: thinking != null && thinking['type'] == 'enabled',
       );
     }
 
