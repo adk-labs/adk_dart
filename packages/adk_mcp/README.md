@@ -73,7 +73,7 @@ Or add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  adk_mcp: ^2026.11.24
+  adk_mcp: ^2026.11.26
 ```
 
 ## Usage

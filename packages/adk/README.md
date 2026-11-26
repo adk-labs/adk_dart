@@ -13,7 +13,7 @@ It bundles the `adk` command-line executable (`adk create`, `adk run`, `adk web`
 
 ## What's New
 
-- **100% `adk-python` `2.15.0` & `adk-web` CLI Parity**: Full support for `adk create` (`--type CODE|CONFIG|BASIC|WORKFLOW`), `adk run [query]` (`--jsonl`, `--timeout`, `--in_memory`, `--resume`, `--replay`), `adk web` / `adk api_server` (Eventarc/PubSub/Webhook triggers, OIDC validation, Enterprise/Express mode, `/dev/apps` routes, HTTP 500 unconfigured eval manager guard, UTF-8 `data:` URL decoding), `adk deploy` (`cloud_run`, `docker`, `agent_engine`, `gke`), `adk eval` (`pass@k` and `pass^k` multi-run criteria), `adk eval_set` (`create`, `add_eval_case`, `generate_eval_cases`), `adk optimize`, `adk generate_agent_card`, `adk migrate session --allow-unsafe-unpickling`, and `adk test --rebuild`.
+- **100% `adk-python` `2.15.1` & `adk-web` CLI Parity**: Full support for `adk create` (`--type CODE|CONFIG|BASIC|WORKFLOW`), `adk run [query]` (`--jsonl`, `--timeout`, `--in_memory`, `--resume`, `--replay`), `adk web` / `adk api_server` (Eventarc/PubSub/Webhook triggers, OIDC validation, Enterprise/Express mode, `/dev/apps` routes, HTTP 500 unconfigured eval manager guard, UTF-8 `data:` URL decoding), `adk deploy` (`cloud_run`, `docker`, `agent_engine`, `gke`), `adk eval` (`pass@k` and `pass^k` multi-run criteria), `adk eval_set` (`create`, `add_eval_case`, `generate_eval_cases`), `adk optimize`, `adk generate_agent_card`, `adk migrate session --allow-unsafe-unpickling`, and `adk test --rebuild`.
 - **Modularized CLI & Dev Web Server Architecture**: Split CLI command dispatchers and Dev Web Server routes into focused `part` / `part of` modules (`cli_run_and_web.dart`, `cli_eval_and_optimize.dart`, `cli_conformance_and_migrate.dart`, `web_server_session_and_run_routes.dart`, `web_server_eval_and_a2a_routes.dart`, `web_server_assets_and_helpers.dart`).
 - **ADK 2.0 Workflows, CascadeLive & Managed Agent**: Exposes upstream ADK 2.0 Workflows, `CascadeLive` + `ElevenLabs` speech pipelines, and GCP Managed Agent APIs.
 - **Unified CLI Toolchain**: Ships the `adk` executable entrypoint for global activation (`dart pub global activate adk`) and local package workflows.
@@ -108,7 +108,7 @@ Or with `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  adk: ^2026.11.24
+  adk: ^2026.11.26
 ```
 
 For local repository development:

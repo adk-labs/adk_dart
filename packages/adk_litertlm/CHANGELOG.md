@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.11.26
+
+- Bumped package version to `2026.11.26` and dependency `adk_dart: ^2026.11.26`.
+
 ## 2026.11.24
 
 - Bumped package version to `2026.11.24` and dependency `adk_dart: ^2026.11.24`.

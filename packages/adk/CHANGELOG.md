@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.11.26
+
+- Bumped package version to `2026.11.26` and dependency `adk_dart: ^2026.11.26`.
+- **Pure Dart Vertex AI Agent Engine REST Client**: Added `HttpAgentEngineRuntimesClient` (`lib/src/cli/http_agent_engine_runtimes_client.dart`) implementing `list` (AIP-160 filter + pagination), `create` (LRO polling), `update` (`updateMask`), and `delete` over Vertex AI REST API without external Python SDKs, wired into `adk deploy agent_engine --update_if_exists`.
+- Synced with `adk_dart` `2026.11.26` (`adk-python` `2.15.1`, `54fc37e5f..03725e8c6`); bundled ADK Web remains at `v1.0.8` (`4b7d11542`, `main-PJ4DBNMP.js`).
+
 ## 2026.11.24
 
 - Bumped package version to `2026.11.24` and dependency `adk_dart: ^2026.11.24`.

@@ -209,8 +209,8 @@ GenerateContentConfig _fullVertexConfig() {
 
 void main() {
   group('1. version.dart (5c4fa9285)', () {
-    test('adkVersion is bumped to 2.15.0', () {
-      expect(adkVersion, '2.15.0');
+    test('adkVersion is bumped to 2.15.1', () {
+      expect(adkVersion, '2.15.1');
     });
   });
 

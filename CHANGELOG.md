@@ -1,3 +1,14 @@
+## 2026.11.26
+
+- **Upstream `adk-python` `2.15.1` Parity (`54fc37e5f..03725e8c6`) & Pure Dart Cloud Backends**:
+  - Updated `adkVersion` to `'2.15.1'` (`4e3aff79a`) and `adkPackageVersion` to `'2026.11.26'`.
+  - **Plugins & Credentials (`e3dbdc172`, `851b7707a`, `3e322e9a9`)**: Expanded `credentialArgNames` / `credentialArgSuffixes` (`secret_access_key`, `_secret_access_key`, `x_amz_signature`, `x_goog_signature`) in `lib/src/utils/credential_names.dart`; added deterministic `event_id` and `invocation_id` tiebreakers, `SessionRollup.root_agent`, and per-turn/scope `scoped_system_prompt` resolution in `_bigquery_agent_analytics_eval_sql.dart`.
+  - **Models & A2A (`1c384506e`, `50961696a`)**: Handled Claude API `2026-10-21` / SDK 2.x sampling removal (`temperature`, `topP`, `topK`) with warnings in `AnthropicLlm`; propagated untriggered `AdkAbortException` raised inside `runner.runAsync` in `A2aAgentExecutor`.
+  - **Telemetry (`8d064dc91`, `825a44c5d`, `0019b8658`)**: Recorded `gen_ai.client.inference.duration` (`genAiClientInferenceDurationMetricName`, `recordClientInferenceDuration`) alongside operation duration; skipped serializing request conversation history when content capture is off; added `ContentCapturingMode`, `TelemetryConfig` content/experimental flags, and experimental `'reasoning'` part tagging (`type: 'reasoning'`).
+  - **Optimization (`d723cb87b`, `276b7e0e6`)**: Added `cloneAgentWithParams` (`lib/src/optimization/agent_tree_cloner.dart`) for dotted parameter overrides and multi-objective `GridSearchAgentOptimizer` (`lib/src/optimization/grid_search_agent_optimizer.dart`, gated by `FeatureName.gridSearchAgentOptimizer`).
+  - **Pure Dart Fsspec Cloud Storage Backends**: Added pure Dart REST `FilesystemProtocol` implementations (`GcsFsspecFilesystem` for `gs://`, `S3FsspecFilesystem` with AWS SigV4 HMAC-SHA256 for `s3://`, and `AzureBlobFsspecFilesystem` with SharedKey HMAC-SHA256 / SAS / Bearer auth for `abfs://`/`abfss://`/`az://`) in `lib/src/integrations/fsspec/cloud_filesystems.dart` and wired them into `urlToFs` / `FsspecArtifactService`.
+  - Verified `adk-web` remains aligned with `v1.0.8` (`4b7d11542`, `main-PJ4DBNMP.js`).
+
 ## 2026.11.24
 
 - **Upstream `adk-python` Parity (`4d9e2c75f..54fc37e5f`)**:
