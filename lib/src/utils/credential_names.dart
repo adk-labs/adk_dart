@@ -28,6 +28,10 @@ const Set<String> credentialTypeNames = <String>{
 };
 
 /// Normalized parameter and mapping-key names that commonly carry secrets.
+///
+/// Covers key names redacted by debug logging (other than ordinary identifiers
+/// such as `signature`), while keeping suffix matching so names like
+/// `secretary` and `prompt_token_count` stay traced.
 const Set<String> credentialArgNames = <String>{
   'access_token',
   'additional_headers',
@@ -59,14 +63,17 @@ const Set<String> credentialArgNames = <String>{
   'proxy_authorization',
   'refresh_token',
   'secret',
+  'secret_access_key',
   'secret_key',
   'service_account_key',
   'session_token',
   'set_cookie',
   'token',
+  'x_amz_signature',
   'x_api_key',
   'x_auth_token',
   'x_goog_api_key',
+  'x_goog_signature',
 };
 
 /// Normalized suffixes for compound secret parameter/key names.
@@ -88,6 +95,7 @@ const List<String> credentialArgSuffixes = <String>[
   '_password',
   '_private_key',
   '_secret',
+  '_secret_access_key',
   '_secret_key',
   '_token',
 ];

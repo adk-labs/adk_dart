@@ -774,13 +774,13 @@ const String _evalViewCtesTemplate = r'''WITH
       session_id,
       invocation_id,
       ARRAY_AGG(
-        user_id IGNORE NULLS ORDER BY timestamp LIMIT 1
+        user_id IGNORE NULLS ORDER BY timestamp, event_id LIMIT 1
       )[SAFE_OFFSET(0)] AS user_id,
       ARRAY_AGG(
-        root_agent_name IGNORE NULLS ORDER BY timestamp LIMIT 1
+        root_agent_name IGNORE NULLS ORDER BY timestamp, event_id LIMIT 1
       )[SAFE_OFFSET(0)] AS first_root_agent_name,
       ARRAY_AGG(
-        agent IGNORE NULLS ORDER BY timestamp LIMIT 1
+        agent IGNORE NULLS ORDER BY timestamp, event_id LIMIT 1
       )[SAFE_OFFSET(0)] AS first_agent,
       MIN(timestamp) AS turn_start_timestamp,
       MAX(timestamp) AS turn_end_timestamp,
@@ -930,13 +930,15 @@ const String _evalViewCtesTemplate = r'''WITH
   ),
   -- One row per event of an agent, with the parts of its configuration that
   -- the event logs: the instruction, description and sub agents of
-  -- AGENT_STARTING, and the tool declarations of LLM_REQUEST.
+  -- AGENT_STARTING, and the tool declarations and system prompt of
+  -- LLM_REQUEST.
   AgentRows AS (
     SELECT
       session_id,
       invocation_id,
       agent AS agent_id,
       timestamp,
+      event_id,
       IF(
         event_type = 'AGENT_STARTING',
         COALESCE(
@@ -969,30 +971,43 @@ const String _evalViewCtesTemplate = r'''WITH
         AND JSON_TYPE(JSON_QUERY(attributes, '$.tools')) = 'array',
         JSON_QUERY(attributes, '$.tools'),
         NULL
-      ) AS tool_declarations
+      ) AS tool_declarations,
+      IF(
+        event_type = 'LLM_REQUEST'
+        AND JSON_TYPE(JSON_QUERY(content, '$.system_prompt')) = 'string'
+        AND TRIM(JSON_VALUE(content, '$.system_prompt')) != '',
+        JSON_VALUE(content, '$.system_prompt'),
+        NULL
+      ) AS system_prompt
     FROM
       SessionEvents
     WHERE
       agent IS NOT NULL
   ),
   -- The latest logged value of each part of the configuration of each agent,
-  -- in each session or turn.
+  -- and the earliest non-blank system prompt it logged, in each session or
+  -- turn.
   AgentLatest AS (
     SELECT
       {scope_columns},
       agent_id,
       ARRAY_AGG(
-        instruction IGNORE NULLS ORDER BY timestamp DESC LIMIT 1
+        instruction IGNORE NULLS ORDER BY timestamp DESC, event_id DESC LIMIT 1
       )[SAFE_OFFSET(0)] AS instruction,
       ARRAY_AGG(
-        description IGNORE NULLS ORDER BY timestamp DESC LIMIT 1
+        description IGNORE NULLS ORDER BY timestamp DESC, event_id DESC LIMIT 1
       )[SAFE_OFFSET(0)] AS description,
       ARRAY_AGG(
-        sub_agents IGNORE NULLS ORDER BY timestamp DESC LIMIT 1
+        sub_agents IGNORE NULLS ORDER BY timestamp DESC, event_id DESC LIMIT 1
       )[SAFE_OFFSET(0)] AS sub_agents,
       ARRAY_AGG(
-        tool_declarations IGNORE NULLS ORDER BY timestamp DESC LIMIT 1
-      )[SAFE_OFFSET(0)] AS tool_declarations
+        tool_declarations IGNORE NULLS
+        ORDER BY timestamp DESC, event_id DESC
+        LIMIT 1
+      )[SAFE_OFFSET(0)] AS tool_declarations,
+      ARRAY_AGG(
+        system_prompt IGNORE NULLS ORDER BY timestamp, event_id LIMIT 1
+      )[SAFE_OFFSET(0)] AS scoped_system_prompt
     FROM
       AgentRows
     GROUP BY
@@ -1061,7 +1076,8 @@ const String _evalViewCtesTemplate = r'''WITH
       agent
   ),
   -- The AgentConfig of each agent.  Its instruction comes from the latest
-  -- AGENT_STARTING event, else from the logged system prompt.
+  -- AGENT_STARTING event, else from the earliest system prompt logged in the
+  -- scope, else from the session's earliest logged system prompt.
   AgentConfigs AS (
     SELECT
       {scope_columns},
@@ -1069,7 +1085,12 @@ const String _evalViewCtesTemplate = r'''WITH
       JSON_OBJECT(
         'agent_id', agent_id,
         'instruction',
-        COALESCE(NULLIF(instruction, ''), logged_system_prompt, ''),
+        COALESCE(
+          NULLIF(instruction, ''),
+          scoped_system_prompt,
+          logged_system_prompt,
+          ''
+        ),
         'description', COALESCE(description, ''),
         'sub_agents', COALESCE(sub_agents, JSON_ARRAY()),
         'tools', IF(
@@ -1112,18 +1133,15 @@ const String _evalSessionQueryTemplate = r'''{ctes},
     SELECT
       session_id,
       ARRAY_AGG(
-        user_id IGNORE NULLS ORDER BY turn_start_timestamp LIMIT 1
+        user_id IGNORE NULLS
+        ORDER BY turn_start_timestamp, invocation_id
+        LIMIT 1
       )[SAFE_OFFSET(0)] AS user_id,
-      COALESCE(
-        ARRAY_AGG(
-          first_root_agent_name IGNORE NULLS
-          ORDER BY turn_start_timestamp
-          LIMIT 1
-        )[SAFE_OFFSET(0)],
-        ARRAY_AGG(
-          first_agent IGNORE NULLS ORDER BY turn_start_timestamp LIMIT 1
-        )[SAFE_OFFSET(0)]
-      ) AS root_agent,
+      ARRAY_AGG(
+        root_agent IGNORE NULLS
+        ORDER BY turn_start_timestamp, invocation_id
+        LIMIT 1
+      )[SAFE_OFFSET(0)] AS root_agent,
       MIN(turn_start_timestamp) AS session_start_timestamp,
       MAX(turn_end_timestamp) AS session_end_timestamp,
       COUNT(DISTINCT invocation_id) AS turn_count,
