@@ -128,9 +128,11 @@ class DockerDeployer extends Deployer {
     List<String>? allowOrigins,
     List<String>? extraGcloudArgs,
     List<String>? extraPackages,
+    String pythonVersion = defaultPythonVersion,
     bool buildImage = false,
     bool validateAgentImport = false,
   }) async {
+    final String safePythonVersion = validatePythonVersion(pythonVersion);
     final Directory srcDir = Directory(agentFolder);
     if (!srcDir.existsSync()) {
       throw ArgumentError.value(
@@ -215,6 +217,7 @@ class DockerDeployer extends Deployer {
       appName: effectiveAppName,
       port: port,
       cmdArgs: cmdArgs,
+      pythonVersion: safePythonVersion,
       adkVersion: adkVersion ?? adkPackageVersion,
       gcpEnvVars: gcpEnvVars,
       hasRequirementsTxt: hasRequirementsTxt,

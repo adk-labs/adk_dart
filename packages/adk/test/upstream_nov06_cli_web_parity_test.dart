@@ -274,7 +274,7 @@ void main() {
       }
     });
 
-    test('6507ad8da: saving artifact failure returns fixed detail string "Error saving artifact"', () async {
+    test('6507ad8da: saving artifact failure returns fixed detail string "Failed to save artifact"', () async {
       const DevProjectConfig project = DevProjectConfig(
         appName: 'art_app',
         agentName: 'assistant',
@@ -314,8 +314,8 @@ void main() {
           final Map<String, dynamic> body =
               jsonDecode(await utf8.decoder.bind(res).join())
                   as Map<String, dynamic>;
-          expect(body['detail'], 'Error saving artifact');
-          expect(body['error'], 'Error saving artifact');
+          expect(body['detail'], 'Failed to save artifact');
+          expect(body['error'], 'Failed to save artifact');
           expect('${body['detail']}', isNot(contains('/var/private/db')));
         } finally {
           client.close(force: true);

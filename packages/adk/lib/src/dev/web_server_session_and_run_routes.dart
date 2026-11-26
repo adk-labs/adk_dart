@@ -186,7 +186,14 @@ Future<void> _handleTriggerRoute(
       statusCode: HttpStatus.notFound,
       message: error.message,
     );
-  } catch (_) {
+  } catch (error, stackTrace) {
+    reportError(
+      error,
+      summary: 'Internal Server Error',
+      logMessage: 'Trigger execution failed',
+      stackTrace: stackTrace,
+      environment: context.environment,
+    );
     await _writeError(
       request,
       context,
@@ -295,6 +302,10 @@ List<String> _nearestLlmSubAgentNames(BaseAgent agent) {
   return names.toList(growable: false);
 }
 
+/// Optional testing hook to capture duplicate LlmAgent warnings during app-info collection.
+@visibleForTesting
+void Function(String message)? duplicateAgentInfoWarningTestingOverride;
+
 Iterable<Object> _walkStaticNodes(Object root) sync* {
   final Set<Object> visited = Set<Object>.identity();
   final List<Object> stack = <Object>[root];
@@ -306,13 +317,23 @@ Iterable<Object> _walkStaticNodes(Object root) sync* {
     yield current;
     final List<Object> children = <Object>[];
     if (current is Workflow) {
-      children.addAll(current.nodes);
-    }
-    if (current is AgentNode) {
-      children.add(current.agent);
-    }
-    if (current is BaseAgent) {
       children.addAll(current.subAgents);
+      children.addAll(current.nodes);
+    } else if (current is LlmAgent) {
+      children.addAll(current.subAgents);
+      for (final Object tool in current.tools) {
+        if (tool is NodeTool) {
+          children.add(tool.node);
+        } else if (tool is BaseNode) {
+          children.add(tool);
+        }
+      }
+    } else if (current is BaseAgent) {
+      children.addAll(current.subAgents);
+    } else if (current is AgentNode) {
+      children.add(current.agent);
+    } else if (current is ParallelWorker) {
+      children.add(current.wrappedNode);
     }
     for (int i = children.length - 1; i >= 0; i--) {
       stack.add(children[i]);
@@ -328,6 +349,11 @@ Future<Map<String, Object?>> _collectAgentInfo(BaseAgent rootAgent) async {
       continue;
     }
     if (agents.containsKey(node.name)) {
+      final String warningMessage =
+          "Duplicate LlmAgent name '${node.name}' encountered while collecting "
+          'app info; keeping first agent.';
+      developer.log(warningMessage, name: 'adk_dart.agent_info');
+      duplicateAgentInfoWarningTestingOverride?.call(warningMessage);
       continue;
     }
 
@@ -367,6 +393,15 @@ Future<List<FunctionDeclaration>> _extractFunctionDeclarations(
 ) async {
   if (toolUnion is BaseTool) {
     final FunctionDeclaration? declaration = toolUnion.getDeclaration();
+    return declaration == null
+        ? const <FunctionDeclaration>[]
+        : <FunctionDeclaration>[declaration.copyWith()];
+  }
+
+  if (toolUnion is BaseNode) {
+    final FunctionDeclaration? declaration = NodeTool(
+      node: toolUnion,
+    ).getDeclaration();
     return declaration == null
         ? const <FunctionDeclaration>[]
         : <FunctionDeclaration>[declaration.copyWith()];
@@ -1382,10 +1417,26 @@ void Function(String message)? runDebugLogTestingOverride;
 Future<void> _handleRun(HttpRequest request, _AdkDevWebContext context) async {
   final Map<String, dynamic> payload = await _readJsonBody(request);
   final _RunRequest runRequest = _parseRunRequest(payload, context);
-  final Runner runner = await context.getRunner(
-    runRequest.appName,
-    request: request,
-  );
+  final Runner runner;
+  try {
+    runner = await context.getRunner(runRequest.appName, request: request);
+  } on ArgumentError catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: '${error.message}',
+    );
+    return;
+  } on StateError catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: error.message,
+    );
+    return;
+  }
   final bool shouldAutoCreateSession =
       runRequest.autoCreateSession ?? runner.autoCreateSession;
 
@@ -1552,10 +1603,26 @@ Future<void> _handleRunSse(
 ) async {
   final Map<String, dynamic> payload = await _readJsonBody(request);
   final _RunRequest runRequest = _parseRunRequest(payload, context);
-  final Runner runner = await context.getRunner(
-    runRequest.appName,
-    request: request,
-  );
+  final Runner runner;
+  try {
+    runner = await context.getRunner(runRequest.appName, request: request);
+  } on ArgumentError catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: '${error.message}',
+    );
+    return;
+  } on StateError catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: error.message,
+    );
+    return;
+  }
   final bool shouldAutoCreateSession =
       runRequest.autoCreateSession ?? runner.autoCreateSession;
 

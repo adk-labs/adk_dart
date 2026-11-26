@@ -4,6 +4,10 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:meta/meta.dart';
+
+import '../version.dart';
+import 'deployers/_dockerfile_template.dart';
 import 'http_agent_engine_runtimes_client.dart';
 
 /// Resolved deployment configuration used to build `gcloud` or `docker` commands.
@@ -33,6 +37,7 @@ class DeployCommand {
     this.otelToCloud = false,
     this.withUi = false,
     this.adkVersion,
+    this.pythonVersion,
     this.logLevel = 'INFO',
     this.allowOrigins = const <String>[],
     this.sessionServiceUri,
@@ -98,6 +103,9 @@ class DeployCommand {
 
   /// Optional ADK version used in deployment.
   final String? adkVersion;
+
+  /// Optional Python version used in container base image.
+  final String? pythonVersion;
 
   /// Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
   final String logLevel;
@@ -209,6 +217,7 @@ class DeployCliOptions {
     this.otelToCloud = false,
     this.withUi = false,
     this.adkVersion,
+    this.pythonVersion,
     this.logLevel = 'INFO',
     this.allowOrigins = const <String>[],
     this.sessionServiceUri,
@@ -279,6 +288,9 @@ class DeployCliOptions {
 
   /// Optional ADK version used in deployment.
   final String? adkVersion;
+
+  /// Optional Python version used in container base image.
+  final String? pythonVersion;
 
   /// Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
   final String logLevel;
@@ -396,6 +408,7 @@ Options:
       --otel_to_cloud                    Enable OpenTelemetry export to GCP
       --with_ui                          Deploy ADK Web UI (development/testing only)
       --adk_version                      ADK version used in deployment
+      --python_version, --python-version Python version used in container image (default: 3.11)
       --log_level, --verbosity           Logging level: DEBUG | INFO | WARNING | ERROR | CRITICAL
       --allow_origins                    Allowed CORS origins (repeatable or comma-separated)
       --a2a                              Enable A2A protocol endpoint
@@ -481,6 +494,66 @@ bool shouldValidateAgentImportOnStartup({
     return false;
   }
   return _compareSemver(adkVersion, agentLoaderMinVersion) >= 0;
+}
+
+/// Resolves whether startup agent import validation should be enabled for an
+/// Agent Engine deployment targeting [adkVersion], emitting a warning when
+/// validation is requested for `adkVersion < 2.0.0`.
+bool resolveAgentEngineValidateAgentImport({
+  required bool validateAgentImport,
+  required String? adkVersion,
+  IOSink? out,
+  IOSink? err,
+}) {
+  final String effectiveAdkVersion =
+      (adkVersion != null && adkVersion.trim().isNotEmpty)
+      ? adkVersion.trim()
+      : adkPackageVersion;
+  final bool resolved = shouldValidateAgentImportOnStartup(
+    skipAgentImportValidation: !validateAgentImport,
+    adkVersion: effectiveAdkVersion,
+  );
+  if (validateAgentImport && !resolved) {
+    (err ?? out)?.writeln(
+      'Omitting startup agent import validation as it requires '
+      'adk_version $agentLoaderMinVersion or later, and '
+      '$effectiveAdkVersion was requested',
+    );
+  }
+  return resolved;
+}
+
+/// Resolves the container Python version for an Agent Engine deployment.
+///
+/// Precedence is: explicit CLI [pythonVersion] > `python_version` in
+/// [agentConfig] (`.agent_engine_config.json`) > [defaultPythonVersion].
+/// Pops any `python_version` entry from [agentConfig] so it is not forwarded to
+/// the Agent Engine API.
+String resolvePythonVersionFromAgentConfig(
+  Map<String, Object?> agentConfig,
+  String? pythonVersion, {
+  IOSink? out,
+}) {
+  final Object? rawConfigPythonVersion = agentConfig.remove('python_version');
+  String? configPythonVersion;
+  if (rawConfigPythonVersion != null) {
+    if (rawConfigPythonVersion is! String) {
+      throw ArgumentError(
+        'python_version in agent platform config must be a string.',
+      );
+    }
+    configPythonVersion = validatePythonVersion(rawConfigPythonVersion);
+  }
+  if (pythonVersion != null) {
+    final String validated = validatePythonVersion(pythonVersion);
+    if (configPythonVersion != null && configPythonVersion != validated) {
+      out?.writeln(
+        'Overriding python_version in agent platform config with $validated',
+      );
+    }
+    return validated;
+  }
+  return configPythonVersion ?? defaultPythonVersion;
 }
 
 int _compareSemver(String a, String b) {
@@ -900,6 +973,85 @@ void validateExtraPackages(List<String> extraPackages) {
 ///   '--dry-run',
 /// ]);
 /// ```
+/// Optional testing override for [defaultDeployRunner] in [runDeployCommand].
+@visibleForTesting
+DeployCommandRunner? defaultDeployRunnerTestingOverride;
+
+/// Optional testing override for creating [HttpAgentEngineRuntimesClient]
+/// instances inside [runDeployCommand].
+@visibleForTesting
+AgentEngineRuntimesClient Function(
+  String project,
+  String region,
+  Map<String, String> environment,
+)?
+agentEngineRuntimesClientFactoryTestingOverride;
+
+String _formatDuplicateDisplayNameWarning({
+  required List<AgentEngineRuntimeInfo> matches,
+  required String displayName,
+  required String project,
+  required String region,
+}) {
+  final String candidates = matches.map(formatAgentEngineRuntime).join('\n');
+  return 'WARNING: ${matches.length} Agent Runtime(s) with display name '
+      '"$displayName" already exist in '
+      '$project/$region; a NEW instance will be created:\n'
+      '$candidates\n'
+      'To update in place, re-run with --agent_engine_id=<ID> '
+      '(--update_if_exists only works once extra duplicates are '
+      'deleted down to a single instance).';
+}
+
+Future<void> _warnBestEffortDuplicateDisplayNames({
+  required AgentEngineRuntimesClient client,
+  required DeployCliOptions options,
+  required IOSink err,
+}) async {
+  try {
+    String? resolvedDisplayName;
+    if ((options.agentFolder != null &&
+            options.agentFolder!.trim().isNotEmpty) ||
+        options.agentEngineConfigFile.trim().isNotEmpty) {
+      final Map<String, Object?> agentConfig = resolveAgentEngineConfig(
+        agentFolder: options.agentFolder ?? '.',
+        agentEngineConfigFile: options.agentEngineConfigFile,
+        displayName: options.displayName,
+        description: options.description,
+        appName: options.appName,
+      );
+      final Object? candidate = agentConfig['display_name'];
+      if (candidate is String && candidate.isNotEmpty) {
+        resolvedDisplayName = candidate;
+      }
+    } else if (options.displayName.isNotEmpty) {
+      resolvedDisplayName = options.displayName;
+    }
+    final List<AgentEngineRuntimeInfo> matches =
+        await findAgentEngineRuntimesByDisplayName(
+          client,
+          resolvedDisplayName,
+          raiseOnError: false,
+        );
+    if (matches.isNotEmpty && resolvedDisplayName != null) {
+      err.writeln(
+        _formatDuplicateDisplayNameWarning(
+          matches: matches,
+          displayName: resolvedDisplayName,
+          project: options.project,
+          region: options.region,
+        ),
+      );
+    }
+  } on Object {
+    // Best-effort warning must never block default deployments.
+  }
+}
+
+/// Runs the deploy CLI command and returns a process-compatible exit code.
+///
+/// Returns `0` for help and successful dry-runs, `64` for invalid arguments,
+/// and `1` for runtime failures while resolving options.
 Future<int> runDeployCommand(
   List<String> args, {
   IOSink? outSink,
@@ -938,21 +1090,28 @@ Future<int> runDeployCommand(
   }
 
   if (options.target == DeployTarget.agentEngine) {
-    final bool shouldUseDefaultHttpClient =
+    final bool canUseDefaultHttpClient =
         agentEngineClient == null &&
         !options.dryRun &&
-        options.updateIfExists &&
         commandRunner == null &&
         options.project.isNotEmpty &&
         options.region.isNotEmpty;
+    final bool shouldDeployViaHttpClient =
+        agentEngineClient != null ||
+        (canUseDefaultHttpClient && options.updateIfExists);
     final AgentEngineRuntimesClient? effectiveClient =
         agentEngineClient ??
-        (shouldUseDefaultHttpClient
-            ? HttpAgentEngineRuntimesClient(
-                project: options.project,
-                region: options.region,
-                environment: env,
-              )
+        (shouldDeployViaHttpClient
+            ? (agentEngineRuntimesClientFactoryTestingOverride?.call(
+                    options.project,
+                    options.region,
+                    env,
+                  ) ??
+                  HttpAgentEngineRuntimesClient(
+                    project: options.project,
+                    region: options.region,
+                    environment: env,
+                  ))
             : null);
     if (effectiveClient != null && !options.dryRun) {
       try {
@@ -967,6 +1126,9 @@ Future<int> runDeployCommand(
           description: options.description,
           agentEngineConfigFile: options.agentEngineConfigFile,
           updateIfExists: options.updateIfExists,
+          adkVersion: options.adkVersion,
+          pythonVersion: options.pythonVersion,
+          validateAgentImport: options.validateAgentImport,
           out: out,
           err: err,
         );
@@ -979,7 +1141,7 @@ Future<int> runDeployCommand(
         err.writeln(deployUsage);
         return 64;
       } finally {
-        if (shouldUseDefaultHttpClient &&
+        if (agentEngineClient == null &&
             effectiveClient is HttpAgentEngineRuntimesClient) {
           effectiveClient.close();
         }
@@ -993,6 +1155,33 @@ Future<int> runDeployCommand(
         '--agent_engine_id, or pass --project and --region.',
       );
       return 1;
+    }
+    if (canUseDefaultHttpClient &&
+        !options.updateIfExists &&
+        (options.agentEngineId == null ||
+            options.agentEngineId!.trim().isEmpty)) {
+      final AgentEngineRuntimesClient duplicateCheckClient =
+          agentEngineRuntimesClientFactoryTestingOverride?.call(
+            options.project,
+            options.region,
+            env,
+          ) ??
+          HttpAgentEngineRuntimesClient(
+            project: options.project,
+            region: options.region,
+            environment: env,
+          );
+      try {
+        await _warnBestEffortDuplicateDisplayNames(
+          client: duplicateCheckClient,
+          options: options,
+          err: err,
+        );
+      } finally {
+        if (duplicateCheckClient is HttpAgentEngineRuntimesClient) {
+          duplicateCheckClient.close();
+        }
+      }
     }
   }
 
@@ -1010,6 +1199,7 @@ Future<int> runDeployCommand(
     otelToCloud: options.otelToCloud,
     withUi: options.withUi,
     adkVersion: options.adkVersion,
+    pythonVersion: options.pythonVersion,
     logLevel: options.logLevel,
     allowOrigins: options.allowOrigins,
     sessionServiceUri: options.sessionServiceUri,
@@ -1036,19 +1226,27 @@ Future<int> runDeployCommand(
     validateAgentImport: options.validateAgentImport,
     extraArgs: options.extraArgs,
   );
-  final List<String> gcloudCommand = switch (options.target) {
-    DeployTarget.cloudRun => toCloudRun(command),
-    DeployTarget.docker => toDocker(command),
-    DeployTarget.agentEngine => toAgentEngine(command),
-    DeployTarget.gke => toGke(command),
-  };
+  final List<String> gcloudCommand;
+  try {
+    gcloudCommand = switch (options.target) {
+      DeployTarget.cloudRun => toCloudRun(command),
+      DeployTarget.docker => toDocker(command),
+      DeployTarget.agentEngine => toAgentEngine(command, out: out, err: err),
+      DeployTarget.gke => toGke(command),
+    };
+  } on ArgumentError catch (error) {
+    err.writeln('${error.message}');
+    err.writeln(deployUsage);
+    return 64;
+  }
 
   if (options.dryRun) {
     out.writeln(gcloudCommand.join(' '));
     return 0;
   }
 
-  final DeployCommandRunner runner = commandRunner ?? defaultDeployRunner;
+  final DeployCommandRunner runner =
+      commandRunner ?? defaultDeployRunnerTestingOverride ?? defaultDeployRunner;
   return runner(gcloudCommand, out: out, err: err, environment: env);
 }
 
@@ -1080,6 +1278,7 @@ DeployCliOptions _parseDeployOptions(
   bool otelToCloud = false;
   bool withUi = false;
   String? adkVersion;
+  String? pythonVersion;
   String logLevel = 'INFO';
   final List<String> allowOrigins = <String>[];
   String? sessionServiceUri;
@@ -1260,6 +1459,23 @@ DeployCliOptions _parseDeployOptions(
     }
     if (arg.startsWith('--adk-version=')) {
       adkVersion = arg.substring('--adk-version='.length);
+      continue;
+    }
+    if (arg == '--python_version' || arg == '--python-version') {
+      pythonVersion = validatePythonVersion(_nextArg(args, i, arg));
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--python_version=')) {
+      pythonVersion = validatePythonVersion(
+        arg.substring('--python_version='.length),
+      );
+      continue;
+    }
+    if (arg.startsWith('--python-version=')) {
+      pythonVersion = validatePythonVersion(
+        arg.substring('--python-version='.length),
+      );
       continue;
     }
     if (arg == '--log_level' || arg == '--verbosity') {
@@ -1714,6 +1930,11 @@ DeployCliOptions _parseDeployOptions(
   validateServiceAccountEmail(resolvedServiceAccount);
 
   final bool defaultUseLocalStorage = resolvedTarget == DeployTarget.docker;
+  final String? resolvedPythonVersion =
+      pythonVersion ??
+      (resolvedTarget == DeployTarget.agentEngine
+          ? null
+          : defaultPythonVersion);
 
   return DeployCliOptions(
     target: resolvedTarget,
@@ -1730,6 +1951,7 @@ DeployCliOptions _parseDeployOptions(
     otelToCloud: otelToCloud,
     withUi: withUi,
     adkVersion: adkVersion,
+    pythonVersion: resolvedPythonVersion,
     logLevel: logLevel,
     allowOrigins: allowOrigins,
     sessionServiceUri: sessionServiceUri,
@@ -1892,6 +2114,9 @@ List<String> toCloudRun(DeployCommand command) {
   validateGcloudExtraArgs(command.extraArgs);
   validateServiceAccountEmail(command.serviceAccount);
   validateExtraPackages(command.extraPackages);
+  if (command.pythonVersion != null) {
+    validatePythonVersion(command.pythonVersion!);
+  }
   return <String>[
     'gcloud',
     if (command.withCloudRunSandbox) 'beta',
@@ -1916,6 +2141,9 @@ List<String> toCloudRun(DeployCommand command) {
 /// The `docker run` command built from [command].
 List<String> toDocker(DeployCommand command) {
   validateGcloudExtraArgs(command.extraArgs);
+  if (command.pythonVersion != null) {
+    validatePythonVersion(command.pythonVersion!);
+  }
   return <String>[
     'docker',
     'run',
@@ -2114,6 +2342,9 @@ Future<String> deployToAgentEngine({
   String description = '',
   String agentEngineConfigFile = '',
   bool updateIfExists = false,
+  String? adkVersion,
+  String? pythonVersion,
+  bool validateAgentImport = true,
   IOSink? out,
   IOSink? err,
   Future<void> Function(String resourceName, Map<String, Object?> agentConfig)?
@@ -2127,6 +2358,9 @@ Future<String> deployToAgentEngine({
     throw ArgumentError(
       'Do not pass both --agent_engine_id and --update_if_exists.',
     );
+  }
+  if (pythonVersion != null) {
+    validatePythonVersion(pythonVersion);
   }
 
   final Map<String, Object?> agentConfig =
@@ -2144,6 +2378,13 @@ Future<String> deployToAgentEngine({
           if (displayName.isNotEmpty) 'display_name': displayName,
           if (description.isNotEmpty) 'description': description,
         };
+  resolvePythonVersionFromAgentConfig(agentConfig, pythonVersion, out: out);
+  resolveAgentEngineValidateAgentImport(
+    validateAgentImport: validateAgentImport,
+    adkVersion: adkVersion,
+    out: out,
+    err: err,
+  );
   agentConfig['agent_framework'] = 'google-adk';
 
   final String? normalizedProject =
@@ -2196,17 +2437,13 @@ Future<String> deployToAgentEngine({
       );
     } else {
       if (matches.isNotEmpty) {
-        final String candidates = matches
-            .map(formatAgentEngineRuntime)
-            .join('\n');
         err?.writeln(
-          'WARNING: ${matches.length} Agent Runtime(s) with display name '
-          '"$resolvedDisplayName" already exist in '
-          '$normalizedProject/$normalizedRegion; a NEW instance will be created:\n'
-          '$candidates\n'
-          'To update in place, re-run with --agent_engine_id=<ID> '
-          '(--update_if_exists only works once extra duplicates are '
-          'deleted down to a single instance).',
+          _formatDuplicateDisplayNameWarning(
+            matches: matches,
+            displayName: resolvedDisplayName ?? '',
+            project: normalizedProject!,
+            region: normalizedRegion!,
+          ),
         );
       }
       final AgentEngineRuntimeInfo runtime = await client.create();
@@ -2239,7 +2476,11 @@ Future<String> deployToAgentEngine({
 }
 
 /// The `gcloud alpha ai reasoning-engines deploy` command from [command].
-List<String> toAgentEngine(DeployCommand command) {
+List<String> toAgentEngine(
+  DeployCommand command, {
+  IOSink? out,
+  IOSink? err,
+}) {
   if (command.agentEngineId != null &&
       command.agentEngineId!.trim().isNotEmpty &&
       command.updateIfExists) {
@@ -2250,6 +2491,15 @@ List<String> toAgentEngine(DeployCommand command) {
   validateGcloudExtraArgs(command.extraArgs);
   validateServiceAccountEmail(command.serviceAccount);
   validateExtraPackages(command.extraPackages);
+  if (command.pythonVersion != null) {
+    validatePythonVersion(command.pythonVersion!);
+  }
+  resolveAgentEngineValidateAgentImport(
+    validateAgentImport: command.validateAgentImport,
+    adkVersion: command.adkVersion,
+    out: out,
+    err: err,
+  );
   String? resolvedDisplayName;
   if (command.agentFolder != null && command.agentFolder!.trim().isNotEmpty ||
       command.agentEngineConfigFile.trim().isNotEmpty) {
@@ -2259,6 +2509,12 @@ List<String> toAgentEngine(DeployCommand command) {
       displayName: command.displayName,
       description: command.description,
       appName: command.appName,
+      out: out,
+    );
+    resolvePythonVersionFromAgentConfig(
+      agentConfig,
+      command.pythonVersion,
+      out: out,
     );
     final Object? candidate = agentConfig['display_name'];
     if (candidate is String && candidate.isNotEmpty) {
@@ -2298,6 +2554,9 @@ List<String> toAgentEngine(DeployCommand command) {
 List<String> toGke(DeployCommand command) {
   validateGcloudExtraArgs(command.extraArgs);
   validateExtraPackages(command.extraPackages);
+  if (command.pythonVersion != null) {
+    validatePythonVersion(command.pythonVersion!);
+  }
   return <String>[
     'gcloud',
     'container',

@@ -20,6 +20,7 @@ import 'package:adk_dart/src/runners/runner.dart';
 import 'package:adk_dart/src/sessions/base_session_service.dart';
 import 'package:adk_dart/src/sessions/session.dart';
 import 'package:adk_dart/src/types/content.dart';
+import 'package:adk_dart/src/utils/error_reporting.dart';
 
 /// Default maximum concurrent trigger invocations per server instance.
 const int defaultMaxConcurrent = 10;
@@ -473,8 +474,14 @@ class TriggerRouter {
         try {
           final List<int> bytes = base64Decode(msg.data!.trim());
           decodedText = utf8.decode(bytes, allowMalformed: true);
-        } on FormatException catch (error) {
-          throw FormatException('Invalid base64 in message.data: $error');
+        } on FormatException catch (error, stackTrace) {
+          reportError(
+            error,
+            summary: 'Invalid base64 in message.data',
+            logMessage: 'Failed to decode Pub/Sub message data',
+            stackTrace: stackTrace,
+          );
+          throw const FormatException('Invalid base64 in message.data');
         }
       }
 
@@ -674,7 +681,11 @@ class TriggerRouter {
         )) {
           if (event.errorCode != null && _isRateLimitValue(event.errorCode!)) {
             throw TransientError(
-              'Rate limit error from model: ${event.errorCode} - ${event.errorMessage}',
+              'Rate limit error from model',
+              StateError(
+                '${event.errorCode}'
+                '${event.errorMessage != null ? ' - ${event.errorMessage}' : ''}',
+              ),
             );
           }
           collected.add(event);
@@ -684,6 +695,14 @@ class TriggerRouter {
         final bool isTransient =
             error is TransientError || _isRateLimitError(error);
         if (!isTransient || attempt >= maxRetries) {
+          if (attempt >= maxRetries &&
+              isTransient &&
+              error is! TransientError) {
+            throw TransientError(
+              'Rate limit exceeded after ${maxRetries + 1} attempts.',
+              error,
+            );
+          }
           rethrow;
         }
         final double expDelay = math.min(

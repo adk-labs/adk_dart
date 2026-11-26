@@ -3,9 +3,12 @@ library;
 
 import 'dart:convert';
 
+/// Default Python version used in generated ADK container `Dockerfile`s.
+const String defaultPythonVersion = '3.11';
+
 final RegExp _appNamePattern = RegExp(r'^[A-Za-z0-9_-]+$');
 final RegExp _pythonVersionPattern = RegExp(
-  r'^[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:-[A-Za-z0-9._-]+)?$',
+  r'^3\.(1[1-9]|[2-9][0-9])(?:\.[0-9]+)?$',
 );
 final RegExp _controlCharPattern = RegExp(r'[\x00-\x1f\x7f]');
 
@@ -21,13 +24,13 @@ String validateAppName(String appName) {
   return appName;
 }
 
-/// Validates that [pythonVersion] is a safe semantic version tag.
+/// Validates that [pythonVersion] is a safe Python 3.11+ version string.
 String validatePythonVersion(String pythonVersion) {
   if (pythonVersion.isEmpty || !_pythonVersionPattern.hasMatch(pythonVersion)) {
     throw ArgumentError.value(
       pythonVersion,
       'pythonVersion',
-      'Invalid Python version format.',
+      'Invalid Python version format. Expected a Python 3.11+ version string such as "3.11", "3.12", or "3.12.1".',
     );
   }
   return pythonVersion;
@@ -176,7 +179,7 @@ String renderDockerfile({
   required String appName,
   required int port,
   required List<String> cmdArgs,
-  String pythonVersion = '3.11',
+  String pythonVersion = defaultPythonVersion,
   String adkVersion = '1.0.0',
   String gcpEnvVars = '',
   bool hasRequirementsTxt = false,

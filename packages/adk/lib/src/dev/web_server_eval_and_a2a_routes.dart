@@ -726,7 +726,7 @@ Future<void> _handleArtifactsRoute(
           request,
           context,
           statusCode: HttpStatus.internalServerError,
-          message: 'Error saving artifact',
+          message: 'Failed to save artifact',
         );
         return;
       }
@@ -736,7 +736,7 @@ Future<void> _handleArtifactsRoute(
           context,
           statusCode: HttpStatus.internalServerError,
           message: 'Artifact metadata unavailable.',
-          detail: 'Error saving artifact',
+          detail: 'Failed to save artifact',
         );
         return;
       }

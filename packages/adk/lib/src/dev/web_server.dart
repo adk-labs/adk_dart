@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:isolate';
 
@@ -94,6 +95,8 @@ import 'package:adk_dart/src/tools/_automatic_function_calling_util.dart';
 import 'package:adk_dart/src/tools/base_tool.dart';
 import 'package:adk_dart/src/tools/base_toolset.dart';
 import 'package:adk_dart/src/tools/computer_use/computer_use_toolset.dart';
+import 'package:adk_dart/src/tools/node_tool.dart';
+import 'package:adk_dart/src/utils/error_reporting.dart';
 import 'package:adk_dart/src/workflow/workflow.dart';
 import 'a2a_push_delivery_queue.dart';
 import 'project.dart';
@@ -285,20 +288,20 @@ Future<HttpServer> startAdkDevWebServer({
   return server;
 }
 
-/// Thrown when an internal special agent (an app name starting with `__`)
-/// is requested while the server is not configured to allow it.
+/// Thrown when a restricted dev-server request is rejected with HTTP 403
+/// Forbidden, such as mutating `/dev/*` requests sent from a foreign browser
+/// origin.
 ///
-/// Special agents (such as a built-in agent-builder assistant) may only be
-/// loaded when the Dev UI is enabled; API-server-only deployments must
-/// reject them to avoid exposing privileged internal tooling.
+/// Retained for 403 foreign-origin access-control handling after built-in
+/// `__`-prefixed special agents were removed.
 class SpecialAgentAccessDeniedException implements Exception {
-  /// Creates a special-agent access-denied exception.
+  /// Creates an access-denied exception with [message].
   const SpecialAgentAccessDeniedException([
     this.message =
         'Access to internal special agents is disabled in API server mode.',
   ]);
 
-  /// Human-readable error message, matching upstream's HTTP detail text.
+  /// Human-readable error message returned in the HTTP 403 response detail.
   final String message;
 
   @override
@@ -1466,6 +1469,8 @@ Map<String, Object?> _traceFromEvent({
       'w3c.parent_span_id': traceContext!.parentSpanId,
     if (traceContext?.tracestate != null)
       'w3c.tracestate': traceContext!.tracestate,
+    if (traceContext?.supportId != null && traceContext!.supportId!.isNotEmpty)
+      'supportID': traceContext.supportId,
     if (traceContext != null && traceContext.hasBaggage) ...<String, Object?>{
       'w3c.baggage': Map<String, String>.from(traceContext.baggage),
       for (final MapEntry<String, String> entry in traceContext.baggage.entries)

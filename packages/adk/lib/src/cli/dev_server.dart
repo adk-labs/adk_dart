@@ -295,7 +295,7 @@ class TelemetryConsentRequest {
   Map<String, Object?> toJson() => <String, Object?>{'telemetry': telemetry};
 }
 
-/// Verifies that an agent-builder or dev-deploy client is local or explicitly
+/// Verifies that a mutating dev-server client is local or explicitly
 /// permitted by `ADK_ALLOW_REMOTE_AGENT_BUILDER`, throwing a [StateError] when
 /// access should be rejected with HTTP 403.
 void requireLocalAgentBuilderClient({
@@ -326,9 +326,11 @@ void requireLocalAgentBuilderClient({
   }
 }
 
-const Set<String> _blockedBuilderYamlKeys = <String>{'args'};
+// Blocked keys and code-reference fields retained for backwards-compatible
+// YAML/JSON validation via [checkCodeReference].
+const Set<String> _blockedYamlKeys = <String>{'args'};
 
-const Set<String> _builderCodeReferenceKeys = <String>{
+const Set<String> _codeReferenceKeys = <String>{
   'after_agent_callbacks',
   'after_model_callbacks',
   'after_tool_callbacks',
@@ -422,7 +424,7 @@ void checkCodeReference(
   if (value is Map) {
     for (final MapEntry<Object?, Object?> entry in value.entries) {
       final String key = '${entry.key}';
-      if (_blockedBuilderYamlKeys.contains(key)) {
+      if (_blockedYamlKeys.contains(key)) {
         final String location = filename == null ? '' : ' in $filename';
         throw ArgumentError(
           "YAML key '$key' is not allowed$location.",
@@ -430,14 +432,14 @@ void checkCodeReference(
       }
       if (key == 'code' && appName == null) {
         throw ArgumentError(
-          'Arbitrary code references ("code") are not allowed in visual builder YAML.',
+          'Arbitrary code references ("code") are not allowed in agent YAML.',
         );
       }
-      if (_builderCodeReferenceKeys.contains(key)) {
+      if (_codeReferenceKeys.contains(key)) {
         final List<String> refs = _extractCodeReferences(entry.value);
         if (key == 'code' && refs.isEmpty) {
           throw ArgumentError(
-            'Arbitrary code references ("code") are not allowed in visual builder YAML.',
+            'Arbitrary code references ("code") are not allowed in agent YAML.',
           );
         }
         for (final String ref in refs) {

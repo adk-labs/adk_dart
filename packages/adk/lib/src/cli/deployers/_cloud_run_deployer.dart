@@ -5,6 +5,7 @@ import 'dart:io';
 
 import '_base_deployer.dart';
 import '_docker_deployer.dart';
+import '_dockerfile_template.dart';
 
 String _basename(String filePath) {
   final String cleaned = filePath.replaceAll(RegExp(r'[/\\]+$'), '');
@@ -163,7 +164,10 @@ class CloudRunDeployer extends Deployer {
     List<String>? allowOrigins,
     List<String>? extraGcloudArgs,
     List<String>? extraPackages,
+    String pythonVersion = defaultPythonVersion,
+    bool validateAgentImport = false,
   }) async {
+    final String safePythonVersion = validatePythonVersion(pythonVersion);
     final String resolvedProject = await resolveProject(project);
     final List<String> validatedExtraArgs = validateGcloudExtraArgs(
       extraGcloudArgs,
@@ -196,6 +200,8 @@ class CloudRunDeployer extends Deployer {
         origins: origins,
         allowOrigins: allowOrigins,
         extraPackages: extraPackages,
+        pythonVersion: safePythonVersion,
+        validateAgentImport: validateAgentImport,
       );
 
       final String resolvedServiceName =

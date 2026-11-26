@@ -8,6 +8,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:adk_dart/src/telemetry/_agent_engine.dart';
+export 'package:adk_dart/src/telemetry/_agent_engine.dart'
+    show
+        AgentEngineTelemetryContext,
+        PropagatedTraceContext,
+        TopSpanProcessor,
+        getPropagatedContext;
+
 import 'adk_web_server.dart';
 export 'adk_web_server.dart'
     show
@@ -718,6 +726,8 @@ class W3cTraceContext {
     this.traceFlags,
     this.tracestate,
     this.baggage = const <String, String>{},
+    this.supportId,
+    this.propagatedContext,
   });
 
   /// Raw validated `traceparent` header value, if present and valid.
@@ -738,16 +748,18 @@ class W3cTraceContext {
   /// Parsed key-value entries from the W3C `baggage` header.
   final Map<String, String> baggage;
 
+  /// Inbound `traceparent` preserved as Agent Engine `supportID` when present.
+  final String? supportId;
+
+  /// Underlying propagated telemetry context from `_agent_engine.dart`.
+  final AgentEngineTelemetryContext? propagatedContext;
+
   /// Whether a valid `traceparent` was extracted.
   bool get hasTraceContext => traceId != null && parentSpanId != null;
 
   /// Whether any baggage entries were extracted.
   bool get hasBaggage => baggage.isNotEmpty;
 }
-
-final RegExp _traceparentRegex = RegExp(
-  r'^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$',
-);
 
 /// Returns `true` when native incoming request tracing is enabled for the HTTP
 /// server.
@@ -761,35 +773,25 @@ bool isServerTracingEnabled({Map<String, String>? environment}) {
   return agentEngineId == null || agentEngineId.isEmpty;
 }
 
-/// Extracts standard W3C Trace Context (`traceparent`, `tracestate`) and
-/// W3C `baggage` headers from incoming HTTP [headers] (case-insensitive).
+/// Extracts W3C Trace Context (`Google-Agent-Engine-Traceparent`,
+/// `traceparent`, `tracestate`) and sanitized W3C `baggage` headers from
+/// incoming HTTP [headers] via [getPropagatedContext].
 ///
-/// When [environment] sets a non-empty `GOOGLE_CLOUD_AGENT_ENGINE_ID`,
-/// incoming `traceparent` and `tracestate` headers are ignored so unsampled
-/// Agent Engine platform spans do not become parent spans or suppress sampling.
-///
-/// Mirrors `otel.extract(dict(request.headers))` and
-/// `FastAPI(..., telemetry={"tracing": not os.getenv("GOOGLE_CLOUD_AGENT_ENGINE_ID")})`
-/// in `api_server.py`.
+/// Supports `Google-Agent-Engine-Traceparent` precedence, Agent Engine
+/// `GOOGLE_CLOUD_AGENT_ENGINE_ID` isolation (ignoring plain `traceparent`
+/// while preserving it in [W3cTraceContext.supportId]), and stripping spoofed
+/// `traceparent`/`google_traceparent` keys from inbound `baggage`.
 W3cTraceContext extractW3cTraceContext(
   Map<String, String> headers, {
+  AgentEngineTelemetryContext? baseContext,
   Map<String, String>? environment,
 }) {
-  final bool tracingEnabled = isServerTracingEnabled(environment: environment);
-  String? rawTraceparent;
-  String? rawTracestate;
-  String? rawBaggage;
-
-  for (final MapEntry<String, String> entry in headers.entries) {
-    final String lowerKey = entry.key.toLowerCase();
-    if (lowerKey == 'traceparent') {
-      rawTraceparent = entry.value.trim();
-    } else if (lowerKey == 'tracestate') {
-      rawTracestate = entry.value.trim();
-    } else if (lowerKey == 'baggage') {
-      rawBaggage = entry.value.trim();
-    }
-  }
+  final AgentEngineTelemetryContext propagated = getPropagatedContext(
+    headers,
+    baseContext: baseContext,
+    environment: environment,
+  );
+  final PropagatedTraceContext? spanContext = propagated.spanContext;
 
   String? traceparent;
   String? traceId;
@@ -797,61 +799,30 @@ W3cTraceContext extractW3cTraceContext(
   String? traceFlags;
   String? tracestate;
 
-  if (tracingEnabled && rawTraceparent != null && rawTraceparent.isNotEmpty) {
-    final RegExpMatch? match = _traceparentRegex.firstMatch(rawTraceparent);
-    if (match != null) {
-      final String version = match.group(1)!;
-      final String candidateTraceId = match.group(2)!;
-      final String candidateSpanId = match.group(3)!;
-      final String candidateFlags = match.group(4)!;
-      final bool validVersion = version != 'ff';
-      final bool validTraceId = candidateTraceId != '00000000000000000000000000000000';
-      final bool validSpanId = candidateSpanId != '0000000000000000';
-      if (validVersion && validTraceId && validSpanId) {
-        traceparent = rawTraceparent;
-        traceId = candidateTraceId;
-        parentSpanId = candidateSpanId;
-        traceFlags = candidateFlags;
-        if (rawTracestate != null && rawTracestate.isNotEmpty) {
-          tracestate = rawTracestate;
+  if (spanContext != null && spanContext.isValid) {
+    traceId = spanContext.traceIdHex;
+    parentSpanId = spanContext.spanIdHex;
+    traceFlags = spanContext.traceFlags.value.toRadixString(16).padLeft(2, '0');
+    traceparent =
+        propagated.getBaggage(traceparentBaggageKey) ??
+        '00-$traceId-$parentSpanId-$traceFlags';
+    if (spanContext.traceState.values.isNotEmpty) {
+      for (final MapEntry<String, String> entry in headers.entries) {
+        if (entry.key.toLowerCase() == 'tracestate') {
+          final String trimmed = entry.value.trim();
+          if (trimmed.isNotEmpty) {
+            tracestate = trimmed;
+          }
+          break;
         }
       }
     }
   }
 
-  final Map<String, String> baggage = <String, String>{};
-  if (rawBaggage != null && rawBaggage.isNotEmpty) {
-    for (final String member in rawBaggage.split(',')) {
-      final String trimmedMember = member.trim();
-      if (trimmedMember.isEmpty) {
-        continue;
-      }
-      // Strip optional baggage properties (;prop=val) after the key=value pair.
-      final String keyValuePart = trimmedMember.split(';').first.trim();
-      final int eqIndex = keyValuePart.indexOf('=');
-      if (eqIndex <= 0) {
-        continue;
-      }
-      final String rawKey = keyValuePart.substring(0, eqIndex).trim();
-      final String rawVal = keyValuePart.substring(eqIndex + 1).trim();
-      if (rawKey.isEmpty) {
-        continue;
-      }
-      String decodedKey = rawKey;
-      String decodedVal = rawVal;
-      try {
-        decodedKey = Uri.decodeComponent(rawKey);
-      } on ArgumentError {
-        // Keep raw key on malformed percent encoding.
-      }
-      try {
-        decodedVal = Uri.decodeComponent(rawVal);
-      } on ArgumentError {
-        // Keep raw value on malformed percent encoding.
-      }
-      baggage[decodedKey] = decodedVal;
-    }
-  }
+  final Map<String, String> sanitizedBaggage =
+      Map<String, String>.from(propagated.baggage)
+        ..remove(traceparentBaggageKey)
+        ..remove(googleTraceparentBaggageKey);
 
   return W3cTraceContext(
     traceparent: traceparent,
@@ -859,7 +830,9 @@ W3cTraceContext extractW3cTraceContext(
     parentSpanId: parentSpanId,
     traceFlags: traceFlags,
     tracestate: tracestate,
-    baggage: baggage,
+    baggage: Map<String, String>.unmodifiable(sanitizedBaggage),
+    supportId: propagated.getBaggage(googleTraceparentBaggageKey),
+    propagatedContext: propagated,
   );
 }
 
