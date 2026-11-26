@@ -1,6 +1,7 @@
 /// Data models used by optimizer sampling and ranking workflows.
 library;
 
+import '../agents/base_agent.dart';
 import '../agents/llm_agent.dart';
 
 /// Holds metric scores produced by one optimizer sampling pass.
@@ -143,8 +144,17 @@ class UnstructuredSamplingResult extends BaseSamplingResult {
   }
 }
 
+/// Common contract for scored optimized agent containers.
+abstract interface class ScoredAgentWithScores {
+  /// Optimized agent candidate.
+  BaseAgent get optimizedAgent;
+
+  /// Optional aggregate score across validation metrics.
+  double? get overallScore;
+}
+
 /// Represents one optimized agent candidate with aggregate scoring.
-class BaseAgentWithScores {
+class BaseAgentWithScores implements ScoredAgentWithScores {
   /// Creates a scored optimized agent container.
   BaseAgentWithScores({required this.optimizedAgent, this.overallScore});
 
@@ -176,9 +186,11 @@ class BaseAgentWithScores {
   }
 
   /// Optimized agent candidate.
+  @override
   final Agent optimizedAgent;
 
   /// Optional aggregate score across validation metrics.
+  @override
   final double? overallScore;
 
   /// Standard JSON Schema for [BaseAgentWithScores] / [AgentWithScores].
@@ -213,7 +225,7 @@ class BaseAgentWithScores {
 typedef AgentWithScores = BaseAgentWithScores;
 
 /// Wraps optimizer output candidates.
-class OptimizerResult<T extends BaseAgentWithScores> {
+class OptimizerResult<T extends ScoredAgentWithScores> {
   /// Creates an immutable optimizer result.
   OptimizerResult({required List<T> optimizedAgents})
     : optimizedAgents = List<T>.unmodifiable(optimizedAgents);

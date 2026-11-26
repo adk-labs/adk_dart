@@ -101,6 +101,9 @@ enum FeatureName {
   /// Google API tool wrapper support.
   googleTool('GOOGLE_TOOL'),
 
+  /// Multi-objective grid search agent optimizer.
+  gridSearchAgentOptimizer('GRID_SEARCH_AGENT_OPTIMIZER'),
+
   /// Lightweight session copy optimization for in-memory sessions.
   inMemorySessionServiceLightCopy('IN_MEMORY_SESSION_SERVICE_LIGHT_COPY'),
 
@@ -355,6 +358,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
       ),
       FeatureName.googleTool: const FeatureConfig(
         FeatureStage.stable,
+        defaultOn: true,
+      ),
+      FeatureName.gridSearchAgentOptimizer: const FeatureConfig(
+        FeatureStage.experimental,
         defaultOn: true,
       ),
       FeatureName.inMemorySessionServiceLightCopy: const FeatureConfig(

@@ -1,7 +1,7 @@
 /// Local eval-set-backed sampler used by prompt optimizers.
 library;
 
-import '../agents/llm_agent.dart';
+import '../agents/base_agent.dart';
 import '../evaluation/eval_case.dart';
 import '../evaluation/eval_config.dart';
 import '../evaluation/eval_metrics.dart';
@@ -251,7 +251,7 @@ class LocalEvalSampler extends Sampler<UnstructuredSamplingResult> {
 
   @override
   Future<UnstructuredSamplingResult> sampleAndScore(
-    Agent candidate, {
+    BaseAgent candidate, {
     ExampleSet exampleSet = ExampleSet.validation,
     List<String>? batch,
     bool captureFullEvalData = false,
