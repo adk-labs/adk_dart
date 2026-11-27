@@ -17,7 +17,7 @@ description: >-
 
 # ADK Dart Agent Builder
 
-Checked against `adk_dart` `2026.11.26` (`adk-python` `2.15.1` baseline).
+Checked against `adk_dart` `2026.11.27` (`adk-python` `2.15.1` baseline).
 
 Read only the reference file that matches the task at hand to keep context lean:
 

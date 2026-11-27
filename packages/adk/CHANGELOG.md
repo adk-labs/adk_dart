@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.11.27
+
+- Bumped package version to `2026.11.27` and dependency `adk_dart: ^2026.11.27`.
+- **1-Month CLI, Deployers, Dev Server & Trigger Parity (`bd77f3f2c`, `7d2c7b75d`, `84cb0742b`, `ec2ac7c5e`, `e2a21ac23`, `c890aa317`, `d61f4281d`, `f27b8f105`, `6507ad8da`)**:
+  - Wired `--python_version` / `--python-version` (`3.11+` validation and precedence) across `cli_deploy.dart`, `_docker_deployer.dart`, `_cloud_run_deployer.dart`, and `_dockerfile_template.dart`.
+  - Wired `shouldValidateAgentImportOnStartup` into Agent Engine deploys and ran best-effort duplicate `display_name` warnings on `adk deploy agent_engine` even without `--update_if_exists`.
+  - Wired `getPropagatedContext` into `api_server.dart` / `web_server.dart` (`Google-Agent-Engine-Traceparent`, `supportID`, W3C `baggage` sanitization).
+  - Returned HTTP `404` for `__`-prefixed reserved app names on `/run` and `/run_sse`, traversed `NodeTool`/`BaseNode` and `ParallelWorker` in `/app-info` with duplicate `LlmAgent` warnings, sanitized Pub/Sub base64 decode `400` and `TransientError.message` outputs with `reportError`, and aligned artifact save `500` error text (`Failed to save artifact`).
+
 ## 2026.11.26
 
 - Bumped package version to `2026.11.26` and dependency `adk_dart: ^2026.11.26`.

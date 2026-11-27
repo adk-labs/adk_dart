@@ -1,3 +1,11 @@
+## 2026.11.27
+
+- **1-Month Upstream Parity Audit Fixes (`adk-python` `2.15.1` / `03725e8c6`, `adk-web` `v1.0.8` / `4b7d11542` — no new upstream commits since `2026.11.26`)**:
+  - Updated `adkPackageVersion` to `'2026.11.27'` (`adkVersion` remains `'2.15.1'`).
+  - **Integrations & Sessions (`aa98d180b`, `4c880408b`, `6b2d45523`, `73dca84ef`, `c4376a657`)**: Aligned `OpenAIDecisionsClassifier` wire request/response schema (`answers` list, `confidence`, `probabilities` lists, `1e-6` tolerance); switched `AgentEngineEnvironment.readFile` exit code `67` (`> 1 MiB`) to multi-slice `dd` chunked reading; added transactional `_applyScopedStateDelta` and JSON-safe/Base64 state serialization in `RedisSessionService`; added `aadObjectId` sender resolution and `errorMessage` handling in `TeamsRunner`.
+  - **Core, Models, Flows & Tools (`da786ed22`, `2084efbe1`, `1c7e8f76b`, `29956a8e6`, `a702e3c08`, `ec2ac7c5e`)**: Restricted `AnthropicLlm` forced-tool-choice (`ANY`) downgrade to `thinking['type'] == 'enabled'` (allowing adaptive/disabled thinking); aligned `CallbackType` enum values (`before_agent`, etc.) and per-`Context` `callbackInfo` scoping; expanded `config_agent_utils` blocked modules/prefixes; trimmed/merged `adk:tool_display_names` metadata and forwarded `title` on `_PrefixedTool`; enforced `0` limits for memory and process count in `ExecuteBashTool`'s `ulimit` shell prefix; traversed `NodeTool`/`BaseNode` tools in `agent_info.dart`.
+  - **Plugins, Feature Registry & Telemetry (`03b4fbcee`, `ea298d4bd`, `983383519`, `ed76f9450`, `e738c26fe`, `f27b8f105`)**: Added `toolName` and `defaultGuidance` to `ToolReflectionContext` with full guidance replacement semantics in `ReflectAndRetryToolPlugin`; aligned `FeatureName` stages/defaults (`bigQueryToolConfig`, `dataAgentToolConfig` -> `stable`; `mongoDbSessionService`, `toolArgsMatcher` -> `defaultOn: true`; added `mcpModernProtocol`); added `lib/src/telemetry/_agent_engine.dart` for `Google-Agent-Engine-Traceparent`, Agent Engine isolation, and W3C `baggage` sanitization.
+
 ## 2026.11.26
 
 - **Upstream `adk-python` `2.15.1` Parity (`54fc37e5f..03725e8c6`) & Pure Dart Cloud Backends**:
