@@ -488,6 +488,13 @@ class ModelArmorPlugin extends BasePlugin {
     return null;
   }
 
+  /// Leaves the shared client open when a runner closes.
+  ///
+  /// Closing one runner must not tear down a transport/client that sibling
+  /// runners on the same event loop are still screening through.
+  @override
+  Future<void> close() async {}
+
   Future<({bool shouldBlock, String? deidentifiedText})> _screenText({
     required String text,
     required String templateName,
