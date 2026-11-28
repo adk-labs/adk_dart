@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.11.28
+
+- Bumped package version to `2026.11.28` and dependency `adk_dart: ^2026.11.28`.
+- Synced with `adk_dart` `2026.11.28` (`adk-python` `03725e8c6..bee78e7ce`); bundled ADK Web remains at `v1.0.8` (`4b7d11542`, `main-PJ4DBNMP.js`).
+
 ## 2026.11.27
 
 - Bumped package version to `2026.11.27` and dependency `adk_dart: ^2026.11.27`.

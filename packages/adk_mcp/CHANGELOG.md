@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.11.28
+
+- Bumped package version to `2026.11.28`.
+
 ## 2026.11.27
 
 - Bumped package version to `2026.11.27`.

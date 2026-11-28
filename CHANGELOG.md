@@ -1,3 +1,10 @@
+## 2026.11.28
+
+- **Upstream `adk-python` Parity (`03725e8c6..bee78e7ce`)**:
+  - Updated `adkPackageVersion` to `'2026.11.28'` (`adkVersion` remains `'2.15.1'`).
+  - **Model Armor (`bee78e7ce`)**: Overrode `ModelArmorPlugin.close()` in `lib/src/integrations/model_armor/model_armor.dart` to intentionally leave the shared client open when a runner closes so sibling runners screening concurrently are unaffected; added parity tests in `test/upstream_nov28_model_armor_close_parity_test.dart`.
+  - Verified `adk-web` remains aligned with `v1.0.8` (`4b7d11542`, `main-PJ4DBNMP.js`).
+
 ## 2026.11.27
 
 - **1-Month Upstream Parity Audit Fixes (`adk-python` `2.15.1` / `03725e8c6`, `adk-web` `v1.0.8` / `4b7d11542` — no new upstream commits since `2026.11.26`)**:

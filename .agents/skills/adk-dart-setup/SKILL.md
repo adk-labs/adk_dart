@@ -15,7 +15,7 @@ description: >-
 
 # ADK Dart & Flutter Setup
 
-Checked against `adk_dart` `2026.11.27` (`adk-python` `2.15.1` baseline).
+Checked against `adk_dart` `2026.11.28` (`adk-python` `2.15.1` baseline).
 
 ## 1. Choosing the Right Package & Import
 
